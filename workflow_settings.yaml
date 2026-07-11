@@ -1,0 +1,10 @@
+defaultProject: fy23-asc-addg-dataverse
+defaultDataset: b5_HIS_t
+defaultAssertionDataset: b5_assertions_data
+defaultLocation: US
+dataformCoreVersion: 3.0.52
+
+vars:
+    sourceDataset: b5_HIS
+    stagingDataset: b5_HIS_stg
+    env: sbx
