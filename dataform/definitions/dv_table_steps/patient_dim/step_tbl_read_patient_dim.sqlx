@@ -1,0 +1,57 @@
+js {
+  const glb_env = require("includes/glb_env.js");
+  const { source } = require("definitions/param/source/ehr_patient.js");
+}
+
+config {
+    type: "table",
+    name: "step_tbl_read_patient_dim",
+    schema: glb_env.datasets.staging,
+    description: "Reads Patient details from ehr_patients table",
+    tags: ["patient", "conformed", "dim"]
+}
+
+
+-- The query is now structured to join all required source tables.
+WITH
+    cte_event AS (
+        -- Step 1a: Select new/updated data from the primary patient_details table.
+        SELECT
+            DISTINCT fc.patient_id
+            -- fc.facility_code
+        FROM ${ref(source.source_table_event)} AS fc
+    ),
+
+    -- ADDED: CTE for each dimension table
+    cte_patient AS (
+        -- Step 1b: Select data from the admission table.
+        SELECT *
+        FROM ${ref(source.source_table_patient)}
+    ),
+
+    cte_final_joined_data AS (
+        -- Step 2: Perform the chain of LEFT JOINs as defined in your query.
+        SELECT
+            pt.patient_id,
+            pt.first_name,	
+            pt.last_name,
+            pt.date_of_birth,
+            pt.gender,
+            pt.address_city,
+            pt.address_state,
+            pt.zip_code,
+            pt.primary_language,
+            pt.member_id,
+            pt.payer_id,
+            pt.last_updated,
+            pt.effective_from_dt,
+            pt.effective_to_dt
+            --et.facility_code
+        FROM
+            cte_patient AS pt
+        LEFT JOIN
+            cte_event AS et ON pt.patient_id = et.patient_id
+    )
+
+-- Final step: Select all columns from the final, enriched dataset.
+SELECT * FROM cte_final_joined_data
