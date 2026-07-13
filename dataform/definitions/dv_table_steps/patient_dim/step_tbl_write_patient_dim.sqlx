@@ -1,0 +1,36 @@
+js {
+    // ---- Import framework functions ----
+    // fn_factLoad is a custom function that handles append-only MERGE logic.
+    const {
+        fn_SCD2load
+    } = require("includes/functions.js");
+
+    // ---- Import project-specific environment variables ----
+    const { projectConfig, datasets } = require("includes/glb_env.js");
+
+    // ---- Import parameters for the job, source, and target tables ----
+    const { source } = require("definitions/param/source/ehr_patient.js");
+    const { target } = require("definitions/param/target/patient_dim.js");
+}
+
+config {
+    type: "operations", // Using a view to trigger operations is a standard pattern
+    hasOutput: true,
+    name: "step_tbl_write_patient_dim",
+    schema: dataform.projectConfig.vars.stagingDataset,
+    dependencies: ["step_tbl_process_patient_dim"],
+    description: "Loads processed data into the final dimension table.",
+    tags: ["patient", "conformed", "dim"]
+}
+
+
+${fn_SCD2load({
+    source_ref: ref("step_tbl_process_patient_dim"),
+    
+    target_name: `${target.target_table}`,
+    project_id: projectConfig.projectName,
+    tgt_dataset: target.target_dataset,
+    hash_column: target.hash_dif,
+    natural_key: target.bk, // The business key, e.g., 'ptnt_bk'
+    target_params: target   // An object containing all target column names
+})}

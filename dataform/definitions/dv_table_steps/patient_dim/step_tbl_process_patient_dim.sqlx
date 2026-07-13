@@ -1,0 +1,99 @@
+js {
+    const {
+        source: source_config
+    } = require("definitions/param/source/ehr_patient.js");
+    const {
+        fn_calculateConcat,
+        fn_calculateHash
+    } = require("includes/functions.js");
+}
+
+config {
+    type: "table",
+    name: "step_tbl_process_patient_dim",
+    schema: dataform.projectConfig.vars.stagingDataset,
+    dependencies: ["step_tbl_read_patient_dim"],
+    description: "Applies business logic to patient dimension",
+    tags: ["patient", "conformed", "dim"]
+}
+
+
+WITH
+    cte_read_data AS (
+
+        SELECT
+            *
+        FROM
+            ${ref("step_tbl_read_patient_dim")}
+    ),
+
+    cte_transformed AS (
+
+        SELECT
+            patient_id,
+            TRIM(first_name) AS first_name,
+            TRIM(last_name) AS last_name,
+            CAST(date_of_birth AS DATE) AS dob,
+            CASE 
+                WHEN UPPER(TRIM(gender)) IN ('F', 'FEMALE') THEN 'F'
+                WHEN UPPER(TRIM(gender)) IN ('M', 'MALE') THEN 'M'
+                ELSE 'UNKNOWN' 
+            END AS gender,
+            TRIM(address_city) AS addr_city,
+            TRIM(address_state) AS addr_state,
+            zip_code,
+            primary_language,
+            "NULL" AS risk_tier, -- Late Arriving Attribute
+            -- facility_code,
+
+            CURRENT_TIMESTAMP AS load_ts,
+            effective_from_dt,
+            effective_to_dt
+
+        FROM
+            cte_read_data
+    ),
+
+    cte_final AS (
+
+        SELECT
+            -- ---- NEW: Standardized Framework Keys ----
+            ${fn_calculateHash(source_config.dk)} AS ptnt_dk, 
+            ${fn_calculateConcat(source_config.bk)} AS ptnt_bk, 
+            
+            -- ---- NEW: Configuration-Driven Hash Diff ----
+            ${fn_calculateHash(source_config.hash_diff)} AS hash_diff,
+
+            -- ---- NEW: Standardized Framework Metadata ----
+            CURRENT_TIMESTAMP() AS vld_fm_ts,
+            TIMESTAMP '9999-12-31 23:59:59+00' AS vld_to_ts,
+            'Y' as current_ind,
+
+            -- ---- Pass Through Lineage Metadata from Read Step ----
+            -- dwm_load_info_sk, tenant_sk, src_tmzon, src_cd,
+            -- src_cd_sk, src_descr, src_cd_descr,
+
+            -- ---- Your Final Business Columns from the Transform Step ----
+            patient_id,
+            first_name,
+            last_name,
+            dob,
+            gender,
+            addr_city,
+            addr_state,
+            zip_code,
+            primary_language,
+            risk_tier,
+            load_ts,
+            effective_from_dt,
+            effective_to_dt
+
+        FROM
+            cte_transformed
+    )
+
+-- Final Select from the fully processed data
+SELECT
+    *
+FROM
+    cte_final
