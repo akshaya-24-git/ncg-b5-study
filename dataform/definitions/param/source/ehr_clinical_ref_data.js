@@ -27,6 +27,27 @@ const source = {
     source_table: "EHR_CLINICAL_REF_DATA"
 };
 
+const service_stage_source = {
+    dk: [
+        "'MTRXB5'",
+        "ref_code",
+        "CURRENT_TIMESTAMP"
+    ],
+    bk: [
+        "'MTRXB5'",
+        "ref_code"
+    ],
+    hash_diff: [
+        "ref_name",
+        "high_level_stage",
+        "care_setting",
+        "sla_threshold_mins"
+    ],
+    source_full_read_flag: "Y",
+    source_table: "EHR_CLINICAL_REF_DATA"
+};
+
 module.exports = {
-    source
+    source,
+    service_stage_source
 };

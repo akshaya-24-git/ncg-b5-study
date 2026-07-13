@@ -33,7 +33,8 @@ const target = {
         "ord_name",
         "ord_cat",
         "ord_sub_cat",
-        "turnaround_mins"
+        "turnaround_mins",
+        "load_ts"
     ]
 };
 

@@ -1,0 +1,23 @@
+js {
+  const { fn_SCD1load } = require("includes/functions.js");
+  const { projectConfig, datasets } = require("includes/glb_env.js");
+  const { target } = require("definitions/param/target/service_stage_dim.js");
+}
+
+config {
+  type: "operations",
+  name: "step_tbl_write_service_stage_dim",
+  dependencies: ["step_tbl_process_service_stage_dim"],
+  description: "Loads processed service stage data into the final service_stage_dim table using SCD Type 1.",
+  tags: ["service_stage", "dim"]
+}
+
+${fn_SCD1load({
+    source_ref: ref("step_tbl_process_service_stage_dim"),
+    target_name: "service_stage_dim",
+    project_id: projectConfig.projectName,
+    tgt_dataset: datasets.target,
+    hash_column: target.hash_diff[0],
+    natural_key: target.bk[0],
+    target_params: target
+})}
