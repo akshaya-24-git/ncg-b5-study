@@ -1,0 +1,90 @@
+js {
+    const {
+        source: source,
+    } = require("definitions/param/source/ehr_doctor.js");
+
+    let{
+     dv_env_vars,
+     fn_calculateHash,
+     fn_calculateConcat,  
+    }=require("includes/functions.js")
+}
+
+config {
+    type: "table",
+    name: "step_tbl_process_doctor_dim",
+    schema: glb_env.datasets.staging,
+    dependencies: ["step_tbl_read_doctor_dim"],
+    tags: ["doctor", "conformed", "dim"]
+}
+
+WITH cte_doc_read AS (
+  SELECT
+    doctor_id,
+    npi_number,
+    first_name,
+    last_name,
+    specialty_code,
+    sub_specialty,
+    employment_type,
+    hourly_rate,
+    is_active,
+    last_updated
+  FROM
+    ${ref("step_tbl_read_doctor_dim")}),
+    cte_doc_transform AS (
+        SELECT
+            ${fn_calculateHash(source.dk)} AS doc_dk,
+            ${fn_calculateConcat(source.bk)} AS doc_bk,
+            ${fn_calculateHash(source.hash_diff)} AS hash_diff,
+            npi_number AS npi_number,
+            INITCAP(TRIM(first_name)) AS first_name,
+            INITCAP(TRIM(last_name)) AS last_name,
+            specialty_code AS speciality,
+            sub_specialty AS sub_speciality,
+            employment_type AS emp_type,
+            hourly_rate,
+            CASE WHEN is_active THEN 'Y' ELSE 'N' END AS current_ind,
+            last_updated AS valid_from_ts,
+            CAST('9999-12-31 23:59:59' AS TIMESTAMP) AS valid_to_ts,
+            CURRENT_TIMESTAMP() AS load_ts
+        FROM
+            cte_doc_read
+    ),
+    cte_final AS (
+        SELECT
+            doc_dk,
+            doc_bk,
+            hash_diff,
+            npi_number,
+            first_name,
+            last_name,
+            speciality,
+            sub_speciality,
+            emp_type,
+            hourly_rate,
+            current_ind,
+            valid_from_ts,
+            valid_to_ts,
+            load_ts
+        FROM
+            cte_doc_transform
+    )
+
+select
+        doc_dk,
+        doc_bk,
+        hash_diff,
+        npi_number,
+        first_name,
+        last_name,
+        speciality,
+        sub_speciality, 
+        emp_type,
+        hourly_rate,
+        current_ind,
+        valid_from_ts,
+        valid_to_ts,
+        load_ts
+from cte_final
+
