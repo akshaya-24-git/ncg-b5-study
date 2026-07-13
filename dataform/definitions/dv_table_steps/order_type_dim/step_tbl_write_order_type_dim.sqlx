@@ -1,0 +1,35 @@
+js {
+    const {
+        fn_SCD1load
+    } = require("includes/functions.js");
+    const {
+        projectConfig,
+        datasets
+    } = require("includes/glb_env.js");
+
+    const {
+        target
+    } = require("definitions/param/target/order_type_dim.js");
+    const project_id = projectConfig.projectName;
+    const tgt_dataset = datasets.target;
+}
+
+config {
+    type: "operations",
+    name: "step_tbl_write_order_type_dim",
+    dependencies: ["step_tbl_process_order_type_dim"],
+    description: "Loads processed data into the final order_type_dim table",
+    tags: ["orders", "dim"]
+}
+
+  ${
+      fn_SCD1load({
+          source_ref: ref("step_tbl_process_order_type_dim"),
+          target_name: "order_type_dim",
+          project_id: project_id,
+          tgt_dataset: tgt_dataset,
+          hash_column: target.hash_diff[0],
+          natural_key: target.bk[0],
+          target_params: target
+      })
+  }
