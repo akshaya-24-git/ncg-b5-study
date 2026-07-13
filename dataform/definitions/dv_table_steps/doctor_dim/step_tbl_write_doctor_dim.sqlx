@@ -1,0 +1,38 @@
+js {
+    const {
+        fn_SCD1load
+    } = require("includes/functions.js");
+    const {
+        projectConfig,
+        datasets
+    } = require("includes/glb_env.js");
+
+    const {
+        target
+    } = require("definitions/param/target/doctor_dim.js");
+
+    const project_id = projectConfig.projectName;
+    const tgt_dataset = datasets.target;
+}
+
+config {
+    type: "operations",
+    name: "step_tbl_write_doctor_dim",
+    dependencies: ["step_tbl_process_doctor_dim"],
+    tags: ["doctor", "conformed", "dim"]
+}
+
+  ${
+      fn_SCD1load({
+          source_ref: ref("step_tbl_process_doctor_dim"),
+          target_name: "doctor_dim",
+          project_id: project_id,
+          tgt_dataset: tgt_dataset,
+          hash_column: target.hash_diff[0],
+          natural_key: target.bk[0],
+          target_params: target
+      })
+  };
+
+SELECT
+  1 AS placeholder

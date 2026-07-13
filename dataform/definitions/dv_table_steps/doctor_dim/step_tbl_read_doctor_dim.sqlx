@@ -1,0 +1,38 @@
+js {
+    const glb_env = require("includes/glb_env.js");
+    const { source } = require("definitions/param/source/ehr_doctor.js");
+}
+
+config {
+    type: "table",
+    schema: glb_env.datasets.staging,
+    name: "step_tbl_read_doctor_dim",
+    tags: ["doctor", "conformed", "dim"]
+}
+
+WITH doc_src_data AS (
+  SELECT
+    doctor_id,
+    npi_number,
+    first_name,
+    last_name,
+    specialty_code,
+    sub_specialty,
+    employment_type,
+    hourly_rate,
+    is_active,
+    last_updated
+  FROM
+    ${ref(source.table_name)})
+SELECT
+    doctor_id,
+    npi_number,
+    first_name,
+    last_name,
+    specialty_code,
+    sub_specialty,
+    employment_type,
+    hourly_rate,
+    is_active,
+    last_updated
+FROM doc_src_data
