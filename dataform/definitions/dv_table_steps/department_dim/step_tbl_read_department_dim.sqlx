@@ -1,0 +1,34 @@
+js {
+    const glb_env = require("includes/glb_env.js");
+    const { source } = require("definitions/param/source/ehr_facility_dept.js");
+}
+
+config {
+    type: "view",
+    schema: glb_env.datasets.staging,
+    name: "step_tbl_read_dept_dim",
+    tags: ["dept", "conformed", "dim"]
+}
+
+WITH dept_src_data AS (
+  SELECT
+    department_code,
+    department_name,
+    department_type,
+    facility_code,
+    head_doctor_id,
+    dept_capacity,
+    is_dept_active,
+    last_updated
+  FROM
+    ${ref(source.table_name)})
+SELECT
+    department_code,
+    department_name,
+    department_type,
+    facility_code,
+    head_doctor_id,
+    dept_capacity,
+    is_dept_active,
+    last_updated
+FROM dept_src_data
