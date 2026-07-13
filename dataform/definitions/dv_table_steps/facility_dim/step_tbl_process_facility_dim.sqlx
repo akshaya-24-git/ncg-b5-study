@@ -1,0 +1,245 @@
+
+js {
+    const{
+source }= require("definitions/param/source/ehr_facility_dept_f.js")
+
+
+     const {
+        fn_calculateHash,
+        fn_calculateConcat,
+        fn_getHashKey,
+        fn_ccl_enrich,
+        fn_setHistWhere,
+        fn_setIncrWhere,
+        fn_insertload,
+        fn_exceptionFind,
+        fn_getExceptionDK,
+        fn_generateExceptionSQL,
+        fn_exceptionLoad,
+        fn_auditBatchStart,
+        fn_auditJobStart,
+        fn_auditStepStart,
+        fn_auditStepEnd,
+        fn_auditJobEnd,
+        fn_auditBatchEnd,
+        fn_getSourceCommonCode,
+        fn_GetArrayVal,
+        fn_updateColCompareList,
+        fn_defineArrayList,
+        fn_getSK,
+        fn_getDefaultStr,
+        fn_SCD2load,
+        gbl_getLabels,
+        dv_env_vars,
+        fn_factLoad
+    } = require("includes/functions.js");
+
+}
+
+
+config {
+    type: "table",
+    name: "step_tbl_process_facility_dim",
+    schema: glb_env.datasets.staging,
+    description: "Step 2: Core processing layer using explicitly imported JS functions",
+    tags: ["facility", "conformed", "dim"]
+}
+
+
+-- WITH src_facility_department AS (
+--   -- Step 1: Extract, clean, and cast raw fields from the source table
+--   SELECT
+--     (TRIM(facility_code) )AS facility_code,
+--     TRIM(department_code) AS department_code,
+--     TRIM(facility_name) AS facility_name,
+--     TRIM(facility_type_code) AS facility_type,
+    
+--     -- STTM: concat(city, state, region, zipcode)
+--     CONCAT(
+--       COALESCE(TRIM(city), 'NULL_REPLACED'), ', ', 
+--       COALESCE(TRIM(state), 'NULL_REPLACED'), ', ', 
+--       COALESCE(TRIM(region), 'NULL_REPLACED'), ' ', 
+--       COALESCE(CAST(zip_code AS STRING), '00000')
+--     ) AS facility_full_address,
+    
+--     TRIM(city) AS city,
+--     TRIM(state) AS state,
+--     TRIM(region) AS region,
+    
+--     -- STTM: COALESCE(zip_code, '00000')
+--     COALESCE(CAST(zip_code AS STRING), '00000') AS zip_code,
+    
+--     -- STTM: CAST(total_licensed_beds AS NUMERIC)
+--     CAST(total_licensed_beds AS NUMERIC) AS total_licensebeds,
+    
+--     last_updated,
+--     CURRENT_TIMESTAMP() AS current_ts
+--   FROM
+--     ${ref(source.table_name)}
+-- ),
+
+-- transformed_facility AS (
+--   -- Step 2: Apply architectural hashing and framework-specific functions
+--   SELECT
+--     /* facility_dk: Multi-key composite hash layout
+--        STTM: TO_HEX(md5('MTRXB5' || '~' || facility_code || '~' || department_code || '~' || last_updated))
+--     */
+--     TO_HEX(MD5(CONCAT(
+--       TRIM(COALESCE('MTRXB5', 'NULL_REPLACED')), '||"~"||',
+--       TRIM(COALESCE(facility_code, 'NULL_REPLACED')), '||"~"||',
+--       TRIM(COALESCE(CAST(last_updated AS STRING), 'NULL_REPLACED'))
+--     ))) AS facility_dk,
+
+--     /* facility_bk: The natural keys without operational timestamps
+--        Dynamic invocation using your exact array function mapping
+--     */
+--     ${fn_calculateConcat(source.bk)} AS facility_bk,
+
+--     /* hashdiff: Track mutations across descriptive context fields
+--        STTM: CONCAT(facility_name, facility_type, city, state, region, zip_code, total_licensebeds)
+--     */
+--     TO_HEX(MD5(CONCAT(
+--       TRIM(COALESCE(facility_name, 'NULL_REPLACED')), '||"~"||',
+--       TRIM(COALESCE(facility_type, 'NULL_REPLACED')), '||"~"||',
+--       TRIM(COALESCE(city, 'NULL_REPLACED')), '||"~"||',
+--       TRIM(COALESCE(state, 'NULL_REPLACED')), '||"~"||',
+--       TRIM(COALESCE(region, 'NULL_REPLACED')), '||"~"||',
+--       TRIM(COALESCE(zip_code, 'NULL_REPLACED')), '||"~"||',
+--       TRIM(COALESCE(CAST(total_licensebeds AS STRING), 'NULL_REPLACED'))
+--     ))) AS hashdiff,
+
+--     facility_code AS facility_id,
+--     facility_name,
+--     facility_type,
+--     facility_full_address,
+--     city,
+--     state,
+--     region,
+--     zip_code,
+--     total_licensebeds,
+--     current_ts AS load_ts
+--   FROM
+--     src_facility_department
+-- )
+
+-- -- Step 3: Map clean outputs directly to final physical target schema layout
+-- SELECT 
+--   facility_dk,
+--   facility_bk,
+--   hashdiff,
+--   facility_id,
+--   facility_name,
+--   facility_type,
+--   facility_full_address,
+--   city,
+--   state,
+--   region,
+--   zip_code,
+--   total_licensebeds,
+--   load_ts
+-- FROM 
+--   transformed_facility
+
+
+
+WITH src_facility_department AS (
+  -- Step 1: Extract, clean, and cast raw fields from the source table
+  SELECT
+    (TRIM(facility_code) )AS facility_code,
+    TRIM(department_code) AS department_code,
+    TRIM(facility_name) AS facility_name,
+    TRIM(facility_type_code) AS facility_type,
+    
+    -- STTM: concat(city, state, region, zipcode)
+    CONCAT(
+      COALESCE(TRIM(city), 'NULL_REPLACED'), ', ', 
+      COALESCE(TRIM(state), 'NULL_REPLACED'), ', ', 
+      COALESCE(TRIM(region), 'NULL_REPLACED'), ' ', 
+      COALESCE(CAST(zip_code AS STRING), '00000')
+    ) AS facility_full_address,
+    
+    TRIM(city) AS city,
+    TRIM(state) AS state,
+    TRIM(region) AS region,
+    
+    -- STTM: COALESCE(zip_code, '00000')
+    COALESCE(CAST(zip_code AS STRING), '00000') AS zip_code,
+    
+    -- STTM: CAST(total_licensed_beds AS NUMERIC)
+    CAST(total_licensed_beds AS NUMERIC) AS total_licensebeds,
+    
+    last_updated,
+    CURRENT_TIMESTAMP() AS current_ts
+  FROM
+    ${ref(source.table_name)}
+  
+  --  DEDUPLICATION FILTER: Guarantees only ONE unique row per facility_code goes forward
+  QUALIFY ROW_NUMBER() OVER(
+    PARTITION BY TRIM(facility_code) 
+    ORDER BY last_updated DESC
+  ) = 1
+),
+
+transformed_facility AS (
+  -- Step 2: Apply architectural hashing and framework-specific functions
+  SELECT
+    /* facility_dk: Multi-key composite hash layout
+       STTM: TO_HEX(md5('MTRXB5' || '~' || facility_code || '~' || department_code || '~' || last_updated))
+    */
+    TO_HEX(MD5(CONCAT(
+      TRIM(COALESCE('MTRXB5', 'NULL_REPLACED')), '||"~"||',
+      TRIM(COALESCE(facility_code, 'NULL_REPLACED')), '||"~"||',
+      TRIM(COALESCE(CAST(last_updated AS STRING), 'NULL_REPLACED'))
+    ))) AS facility_dk,
+
+    /* facility_bk: The natural keys without operational timestamps
+       Dynamic invocation using your exact array function mapping
+    */
+    ${fn_calculateConcat(source.bk)} AS facility_bk,
+
+    /* hashdiff: Track mutations across descriptive context fields
+       STTM: CONCAT(facility_name, facility_type, city, state, region, zip_code, total_licensebeds)
+    */
+    TO_HEX(MD5(CONCAT(
+      TRIM(COALESCE(facility_name, 'NULL_REPLACED')), '||"~"||',
+      TRIM(COALESCE(facility_type, 'NULL_REPLACED')), '||"~"||',
+      TRIM(COALESCE(city, 'NULL_REPLACED')), '||"~"||',
+      TRIM(COALESCE(state, 'NULL_REPLACED')), '||"~"||',
+      TRIM(COALESCE(region, 'NULL_REPLACED')), '||"~"||',
+      TRIM(COALESCE(zip_code, 'NULL_REPLACED')), '||"~"||',
+      TRIM(COALESCE(CAST(total_licensebeds AS STRING), 'NULL_REPLACED'))
+    ))) AS hashdiff,
+
+    facility_code AS facility_id,
+    facility_name,
+    facility_type,
+    facility_full_address,
+    city,
+    state,
+    region,
+    zip_code,
+    total_licensebeds,
+    current_ts AS load_ts
+  FROM
+    src_facility_department
+)
+
+-- Step 3: Map clean outputs directly to final physical target schema layout
+SELECT 
+  facility_dk,
+  facility_bk,
+  hashdiff,
+  facility_id,
+  facility_name,
+  facility_type,
+  facility_full_address,
+  city,
+  state,
+  region,
+  zip_code,
+  total_licensebeds,
+  load_ts
+FROM 
+  transformed_facility
+
+

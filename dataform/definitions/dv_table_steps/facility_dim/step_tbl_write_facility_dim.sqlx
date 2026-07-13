@@ -1,0 +1,37 @@
+
+js {
+    // ---- Import project-specific environment variables ----
+    // We import the whole file module as glb_env to match your parameter reference
+    const glb_env = require("includes/glb_env.js");
+
+    // ---- Import parameters for the job, source, and target tables ----
+    const {
+        source
+    } = require("definitions/param/source/ehr_facility_dept_f.js");
+    const {
+        target
+    } = require("definitions/param/target/facility_dim.js");
+    const {
+        fn_SCD1load
+    } = require("includes/functions.js");
+}
+
+config {
+    type: "operations",
+    name: "step_tbl_write_facility_dim",
+    dependencies: ["step_tbl_process_facility_dim"],
+    description: "Loads processed data into the final facility_dim table.",
+    tags: ["facility", "conformed", "dim"]
+}
+
+  ${
+      fn_SCD1load({
+          source_ref: ref("step_tbl_process_facility_dim"),
+          project_id: glb_env.projectConfig.projectName,
+          tgt_dataset: glb_env.datasets.target,
+          target_name: target.target_table,
+          hash_column: target.hashdiff,
+          natural_key: target.bk[0],
+          target_params: target
+      })
+  }
