@@ -1,0 +1,30 @@
+js {
+    // ---- Import project-specific environment variables ----
+    const glb_env = require("includes/glb_env.js");
+
+    // ---- Import parameters for the job, source, and target tables ----
+    const { source } = require("definitions/param/source/ins_plan.js");
+    const { target: target_params } = require("definitions/param/target/insurance_plan_dim.js");
+    const { fn_SCD2load } = require("includes/functions.js");
+
+    const scd_config = {
+      source_ref: ref("step_tbl_process_insurance_plan_dim"),
+      project_id: glb_env.projectConfig.projectName,
+      tgt_dataset: glb_env.datasets.target,
+      target_name: target_params.target_table,
+      hash_column: target_params.hashdiff,
+      natural_key: target_params.bk[0],
+      target_params: target_params
+    };
+}
+
+config {
+    type: "operations",
+    name: "step_tbl_write_insurance_plan_dim",
+    dependencies: ["step_tbl_process_insurance_plan_dim"],
+    description: "Loads processed data into the final insurance_plan_dim table using the SCD framework function.",
+    tags: ["insurance", "conformed", "dim"]
+}
+
+${fn_SCD2load(scd_config)}
+

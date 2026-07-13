@@ -1,0 +1,45 @@
+js {
+    const glb_env = require("includes/glb_env.js");
+    const {
+        source
+    } = require("definitions/param/source/ins_plan.js");
+}
+
+config {
+    type: "table",
+    schema: glb_env.datasets.staging,
+    name: "step_tbl_read_insurance_plan_dim",
+    description: "Insurance Plan Details Raw Read",
+    tags: ["insurance", "conformed", "dim"]
+}
+
+WITH
+  raw_insurance_plan AS (
+  -- Pulling all columns directly from the operational source table as is
+  SELECT
+    payer_id,
+    plan_id,
+    payer_name,
+    plan_name,
+    plan_type_code,
+    coverage_tier,
+    fee_schedule_year,
+    network_type,
+    last_updated
+  FROM
+    ${ref(source.table_name)}
+  QUALIFY
+    ROW_NUMBER() OVER(PARTITION BY payer_id, plan_id, fee_schedule_year ORDER BY last_updated DESC) = 1 )
+-- Final pass extraction
+SELECT
+  payer_id,
+  plan_id,
+  payer_name,
+  plan_name,
+  plan_type_code,
+  coverage_tier,
+  fee_schedule_year,
+  network_type,
+  last_updated
+FROM
+  raw_insurance_plan
