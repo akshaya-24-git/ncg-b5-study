@@ -1,0 +1,26 @@
+js {
+  const glb_env = require("includes/glb_env.js");
+  const { source } = require("definitions/param/source/ehr_clinical_ref_data.js");
+}
+
+config {
+    type: "table",
+    schema: glb_env.datasets.staging,
+    name: "step_tbl_read_order_type_dim",
+    description: "Master lookup to decode lab, radiology, pharmacy tests, and order statuses.",
+    tags: ["orders", "dim"]
+}
+
+WITH
+    cte_date_ref AS (
+        SELECT 
+            ref_code,
+            ref_name,
+            order_category,
+            order_sub_category,
+            typical_turnaround_mins
+        FROM ${ref(source.source_table)}
+        WHERE ref_type = 'ORDER_TYPE'
+    )
+
+SELECT * FROM cte_date_ref
