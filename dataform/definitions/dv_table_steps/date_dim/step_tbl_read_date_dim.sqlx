@@ -1,0 +1,31 @@
+js {
+    const glb_env = require("includes/glb_env.js");
+    const { source } = require("definitions/param/source/date_ref.js");
+}
+
+config {
+    type: "table",
+    name: "step_tbl_read_date_dim",
+    schema: glb_env.datasets.staging,
+    description: "Reads calendar dates and holidays from DATE_REF source.",
+    tags: ["date", "dim"]
+}
+
+WITH
+    cte_source AS (
+        SELECT
+            calendar_date,
+            event_type
+        FROM
+            ${ref(source.source_table)}
+    ),
+
+    cte_final AS (
+        SELECT
+            calendar_date,
+            event_type
+        FROM
+            cte_source
+    )
+
+SELECT * FROM cte_final

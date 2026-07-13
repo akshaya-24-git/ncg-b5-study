@@ -1,0 +1,23 @@
+js {
+    const { fn_FullLoad } = require("includes/functions.js");
+    const { projectConfig } = require("includes/glb_env.js");
+    const { target } = require("definitions/param/target/date_dim.js");
+}
+
+config {
+    type: "operations",
+    hasOutput: true,
+    name: "step_tbl_write_date_dim",
+    schema: dataform.projectConfig.vars.stagingDataset,
+    dependencies: ["step_tbl_process_date_dim"],
+    description: "Loads the conformed date dimension into the final target dataset.",
+    tags: ["date", "dim"]
+}
+
+${fn_FullLoad({
+    source_ref: ref("step_tbl_process_date_dim"),
+    target_name: `${target.target_table}`,
+    project_id: projectConfig.projectName,
+    tgt_dataset: target.target_dataset,
+    target_params: target
+})}

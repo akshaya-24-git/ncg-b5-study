@@ -1,0 +1,77 @@
+js {
+    const {
+        source: source_config
+    } = require("definitions/param/source/date_ref.js");
+}
+
+config {
+    type: "table",
+    name: "step_tbl_process_date_dim",
+    schema: dataform.projectConfig.vars.stagingDataset,
+    dependencies: ["step_tbl_read_date_dim"],
+    description: "Transforms date reference data into a conformed date dimension.",
+    tags: ["date", "dim"]
+}
+
+WITH
+    cte_read_data AS (
+        SELECT
+            calendar_date,
+            event_type
+        FROM
+            ${ref("step_tbl_read_date_dim")}
+    ),
+
+    cte_date_sequence AS (
+        SELECT
+            calendar_date
+        FROM
+            UNNEST(GENERATE_DATE_ARRAY('2022-01-01', '2025-12-31')) AS calendar_date
+    ),
+
+    cte_transformed AS (
+        SELECT
+            generated.calendar_date,
+            DATE_REF.event_type,
+            FORMAT_DATE('%A', generated.calendar_date) AS day_of_week,
+            EXTRACT(DAYOFWEEK FROM generated.calendar_date) AS day_of_week_num,
+            EXTRACT(WEEK FROM generated.calendar_date) AS week_of_year,
+            EXTRACT(MONTH FROM generated.calendar_date) AS month_num,
+            FORMAT_DATE('%B', generated.calendar_date) AS month_name,
+            EXTRACT(QUARTER FROM generated.calendar_date) AS quarter_num,
+            EXTRACT(YEAR FROM generated.calendar_date) AS year_num,
+            EXTRACT(YEAR FROM DATE_ADD(generated.calendar_date, INTERVAL 9 MONTH)) AS fiscal_year,
+            CASE WHEN EXTRACT(DAYOFWEEK FROM generated.calendar_date) IN (1, 7) THEN TRUE ELSE FALSE END AS is_weekend,
+            CASE WHEN DATE_REF.event_type = 'HOLIDAY' THEN TRUE ELSE FALSE END AS is_holiday,
+            CASE WHEN DATE_REF.event_type = 'FESTIVAL' THEN TRUE ELSE FALSE END AS is_festival
+        FROM
+            cte_date_sequence AS generated
+        LEFT JOIN
+            cte_read_data AS DATE_REF
+        ON
+            generated.calendar_date = DATE_REF.calendar_date
+    ),
+
+    cte_final AS (
+        SELECT
+            LOWER(TO_HEX(MD5(CONCAT('MTRXB5', '~', COALESCE(CAST(calendar_date AS STRING), ''), '~', COALESCE(CAST(EXTRACT(YEAR FROM DATE_ADD(calendar_date, INTERVAL 9 MONTH)) AS STRING), ''))))) AS date_dk,
+            calendar_date AS full_date,
+            day_of_week,
+            day_of_week_num,
+            week_of_year,
+            month_num,
+            month_name,
+            quarter_num,
+            year_num,
+            fiscal_year,
+            is_weekend,
+            is_holiday,
+            is_festival
+        FROM
+            cte_transformed
+    )
+
+SELECT
+    *
+FROM
+    cte_final
