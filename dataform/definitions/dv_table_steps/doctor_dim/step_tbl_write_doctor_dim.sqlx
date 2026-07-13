@@ -32,7 +32,7 @@ config {
           natural_key: target.bk[0],
           target_params: target
       })
-  };
+  }
 
 SELECT
   1 AS placeholder
