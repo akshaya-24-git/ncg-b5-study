@@ -21,7 +21,7 @@ const source = {
         "addr_state",
         "zip_code",
         "primary_language",
-        "risk_tier",
+        // "risk_tier",
         "effective_from_dt",
         "effective_to_dt"
     ],
