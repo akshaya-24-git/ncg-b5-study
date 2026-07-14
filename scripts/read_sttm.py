@@ -49,6 +49,8 @@ if __name__ == '__main__':
     parser.add_argument('--output', help='Optional path to write output (CSV or JSON by extension)')
     parser.add_argument('--format', choices=['csv', 'json', 'table'], default='table', help='Output format when writing to a file or printing')
     parser.add_argument('--row-limit', type=int, default=20, help='Number of rows to print when using table output')
+    parser.add_argument('--materialize', action='store_true', help='When set, write extracted files to disk under --out-dir')
+    parser.add_argument('--out-dir', default=str(Path.cwd() / 'ncg-b6-study'), help='Output directory for materialized extracts (default: ./ncg-b6-study)')
     args = parser.parse_args()
 
     workbook_path = Path(args.workbook)
@@ -57,16 +59,27 @@ if __name__ == '__main__':
 
     rows = read_sttm_sheet(workbook_path, args.sheet)
 
-    if args.output:
-        output_path = Path(args.output)
+    # Default behaviour: do not write files unless --materialize is set
+    if args.materialize:
+        out_dir = Path(args.out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if args.output:
+            output_path = Path(args.output)
+        else:
+            suffix = 'csv' if args.format == 'csv' else 'json'
+            output_path = out_dir / f"{args.sheet}.{suffix}"
+
         if args.format == 'csv':
             write_csv(rows, output_path)
         elif args.format == 'json':
             write_json(rows, output_path)
         else:
             write_csv(rows, output_path)
-        print(f"Wrote {len(rows)} rows from '{args.sheet}' to {output_path}")
+        print(f"Materialized {len(rows)} rows from '{args.sheet}' to {output_path}")
     else:
+        # Dry-run / in-memory behavior
+        if args.output:
+            print(f"Dry-run: --output provided but --materialize not set. No file will be written. Use --materialize to persist.")
         if args.format == 'json':
             print(json.dumps([dict(zip(rows[0], row)) for row in rows[1:]], indent=2, ensure_ascii=False))
         else:
