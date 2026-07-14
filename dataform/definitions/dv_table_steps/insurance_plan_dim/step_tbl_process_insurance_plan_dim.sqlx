@@ -1,0 +1,75 @@
+js {
+    const glb_env = require("includes/glb_env.js");
+    const {
+        source
+    } = require("definitions/param/source/ins_plan.js");
+    const {
+        fn_calculateHash,
+        fn_calculateConcat
+    } = require("includes/functions.js");
+}
+
+config {
+    type: "table",
+    schema: glb_env.datasets.staging,
+    name: "step_tbl_process_insurance_plan_dim",
+    description: "Step 2: Core processing layer for Insurance Plan Dimension using framework functions",
+    tags: ["insurance", "conformed", "dim"]
+}
+
+WITH src_insurance_plan AS (
+  -- Step 1: Extract, clean, and cast raw fields from the local read layer
+  SELECT
+    TRIM(payer_id) AS payer_id,
+    TRIM(plan_id) AS plan_id,
+    TRIM(payer_name) AS payer_name,
+    TRIM(plan_name) AS plan_name,
+    TRIM(plan_type_code) AS plan_type_code,
+    TRIM(coverage_tier) AS coverage_tier,
+    CAST(fee_schedule_year AS INT64) AS fee_schedule_year,
+    TRIM(network_type) AS network_type,
+    CAST(last_updated AS TIMESTAMP) AS last_updated,
+    CURRENT_TIMESTAMP() AS current_ts
+  FROM
+    ${ref("step_tbl_read_insurance_plan_dim")}
+),
+
+transformed_insurance AS (
+  -- Step 2: Apply framework macros and generate SCD2 placeholders
+  SELECT
+    ${fn_calculateHash(source.dk)} AS ins_dk,
+    ${fn_calculateConcat(source.bk)} AS ins_bk,
+    ${fn_calculateHash(source.hash_diff)} AS hashdiff,
+    payer_id,
+    payer_name,
+    plan_name,
+    plan_type_code AS plan_type,
+    coverage_tier,
+    fee_schedule_year,
+    network_type,
+    'Y' AS current_ind,
+    last_updated AS valid_from_ts,
+    CAST('2999-12-31' AS TIMESTAMP) AS valid_to_ts,
+    current_ts AS bq_load_ts
+  FROM
+    src_insurance_plan
+)
+
+SELECT
+  ins_dk,
+  ins_bk,
+  hashdiff,
+  payer_id,
+  payer_name,
+  plan_name,
+  plan_type,
+  coverage_tier,
+  fee_schedule_year,
+  network_type,
+  current_ind,
+  valid_from_ts,
+  valid_to_ts,
+  bq_load_ts
+FROM
+  transformed_insurance
+
