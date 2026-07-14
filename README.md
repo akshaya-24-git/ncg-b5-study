@@ -12,79 +12,60 @@ The project is structured around:
 
 The STTM workbook itself is intentionally external to the repo and ignored by Git. The pipeline is designed to read STTM definitions without materializing output unless explicitly requested.
 
-## Key Components
+### Key Components
 
-### Dataform Assets
+#### Layered Dataform Assets (`definitions/dv_table_steps/`)
 
-The current implementation includes:
-- `patient_dim` — patient dimension read/process/write steps
-- `date_dim` — calendar dimension generation, holiday/festival enrichment, and date key generation
-- `patient_diagnosis_brg` — patient diagnosis bridge table read/process/write steps
-- `risk_score_fct` — risk score fact pipeline with STTM-aligned score, tier, and readmission probability logic
+The analytical warehouse pipeline implements a rigid, three-tier framework across all master dimensions, relational bridges, and transactional facts to guarantee clean linage separation:
 
-Each of these follows a layered pattern:
-- `step_tbl_read_*` to read and stage source inputs
-- `step_tbl_process_*` to transform and calculate derived fields
-- `step_tbl_write_*` to load the final target table
+* **Ingest Layer (`step_tbl_read_*`)**: Disconnects the core pipeline from downstream mutations by fetching, staging, and grouping raw operational data directly from core source registries.
+* **Business Transformation Layer (`step_tbl_process_*`)**: Applies deterministic data cleaning routines, standardizes categorical domain strings, handles structural null values via fallback statements, and calculates complex analytical metric measurements.
+* **Materialization Layer (`step_tbl_write_*`)**: Invokes centralized orchestration macros to safely apply structural modifications (such as SCD1 updates, SCD2 versioning histories, or absolute Append-Only / Full-Load truncations) directly onto final physical schemas.
 
-### Parameter Files
+#### Parameterized Metadata Configuration Files (`definitions/param/`)
 
-Source and target parameter files define the expected business keys, surrogate keys, hash differential columns, and table names used by the Dataform SQLX files.
+Rather than embedding schema properties within compiled queries, each model imports a dedicated JavaScript parameter configuration file. This abstracts structural definitions into clear arrays:
 
-Example:
-- `dataform/definitions/param/source/risk_score_fct.js`
+* **Surrogate Keys (`dk`)** and **Business Keys (`bk`)** to maintain master entity uniqueness.
+* **Change Fingerprints (`hash_diff`)** tracking delta mutations across Type-2 historical transitions.
+* **Target Definitions (`columns`, `insert_list`, `update_list`)** enforcing target-layer column ordering contracts across all tables.
 
-These parameter files are critical because they enable the SQLX layers to be reusable while preserving exact field mappings.
+#### Shared Analytical Utility Helpers (`includes/`)
 
-### Shared Helpers
+Centralized JavaScript frameworks provide standard cryptographic functions used uniformly across every asset layer:
 
-`dataform/includes/functions.js` contains the reusable hash and concatenation helpers used by the models:
-- `fn_calculateHash()` for DK and hash_diff values
-- `fn_calculateConcat()` for BK values
-- pipeline helpers used by write operations
+* `${fn_calculateHash()}`: Converts data inputs into uniform `MD5` hex-hash strings for surrogate keys and version tracking differentiator records.
+* `${fn_calculateConcat()}`: Generates standard natural business keys separated by unique delimiters (`<>`).
+* `fn_SCD1load()`, `fn_SCD2load()`, and `fn_FullLoad()` macros handle automated target merges.
 
-### STTM Pipeline Scripts
+---
 
-The repo includes a non-materializing STTM workflow:
-- `scripts/read_sttm.py` — reads an XLSX sheet and prints results by default, only writing files when `--materialize` is set
-- `scripts/update_sttm.py` — previews CSV-based workbook updates by default, only persisting changes with `--materialize`
-- `scripts/pipeline_sttm.py` — orchestrates extract/update workflows with explicit dry-run behavior
+### What Was Built
 
-This design is intentionally safe: the default behavior is extraction or preview only, avoiding accidental output.
+The agentic workflow successfully mapped and implemented the complete data vault warehouse footprint, categorizing entities into three scalable architectural structures:
 
-## What Was Built
+#### 1. Canonical Dimensions (`*_dim`)
 
-### Patient Dimension
+Built foundational, highly performant master lookup matrices (including `patient_dim`, `date_dim`, `doctor_dim`, `department_dim`, `insurance_plan_dim`, `order_type_dim`, `service_stage_dim`, and `bed_dim`) which successfully:
 
-The patient dimension implementation was built to:
-- read active patient source keys
-- normalize business key prefixes
-- generate stable dimension keys
-- preserve the expected target column list via parameter-driven metadata
+* Enforce uppercase standard string-trim operations and explicit boolean / date typing across baseline properties.
+* Incorporate automated `MD5` delta mutation fingerprints (`hash_diff`) to seamlessly close out old historical profiles and append new active version rows (`current_ind` flags updated from boolean targets to explicit `'Y'` or `'N'` strings).
+* Construct a continuous, gapless date reference framework (`date_dim`) supporting weekend flag calculations, regional festival lookups, and financial offset boundaries.
 
-### Date Dimension
+#### 2. Relational Many-to-Many Bridges (`*_brg`)
 
-The date dimension implementation generates a calendar grid and enriches it with the external reference data. It includes:
-- full date and calendar components
-- fiscal year logic
-- weekend, holiday, and festival flags
-- `date_dk` and `full_date` business key construction
+Implemented structural crossing layers—headlined by `patient_diagnosis_brg`—designed to connect complex data dimensions with high integrity:
 
-### Patient Diagnosis Bridge
+* Isolate individual active relational rows cleanly using analytic indexing ranks (`ROW_NUMBER() OVER(...)`) to eliminate multi-matching merge row replication errors.
+* Expose granular condition-level timeline flags (`onset_date`, `resolution_date`) and clinical indicators to act as an un-multiplied source anchor for facts.
 
-The bridge table implementation was designed to:
-- connect patient diagnosis records to patients
-- expose diagnosis-level clinical flags and comorbidity metadata
-- serve as the source anchor for the risk score fact
+#### 3. Transactional Fact Arrays (`*_fct`)
 
-### Risk Score Fact
+Designed complex cumulative metrics tables (including `risk_score_fct`, `doctor_schedule_fct`, `ancillary_order_fct`, and `wait_event_fct`) to support deep executive-level performance and predictive analysis:
 
-The risk score fact pipeline now includes:
-- multi-source extraction from patient, date, bridge, encounter, and claim data
-- STTM-style composite score normalization
-- tier mapping to Low/Medium/High/Critical
-- logistic readmission probability using STTM coefficients
-- hash_diff generation and SCD2 metadata fields
+* Drive metrics processing from an array-unnesting architecture (`LEFT JOIN UNNEST()`) rather than resource-heavy correlated subqueries.
+* Deploy clinically calibrated, non-linear machine learning scoring formulas (e.g., Logistic Sigmoid functions mapping utilization, comorbidity weights, and financial spend trajectories) to yield accurate risk tier stratifications (`Low`, `Medium`, `High`, `Critical`).
+* Establish strict alignment with external parameter properties to guarantee predictable fact outputs.
 
 ## What Worked Well
 
