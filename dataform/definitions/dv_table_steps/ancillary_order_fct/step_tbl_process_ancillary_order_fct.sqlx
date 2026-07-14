@@ -1,8 +1,27 @@
 js {
-  const { source } = require("definitions/param/source/ancillary_order_fct.js");
   const { target } = require("definitions/param/target/ancillary_order_fct.js");
   const { fn_calculateHash, fn_calculateConcat } = require("includes/functions.js");
   const glb_env = require("includes/glb_env.js");
+
+  const source = {
+    dk: [
+      "'MTRXB5'",
+      "encounter_dk",
+      "event_id",
+      "CURRENT_TIMESTAMP()"
+    ],
+    bk: [
+      "'MTRXB5'",
+      "encounter_dk",
+      "event_id"
+    ],
+    hash_diff: [
+      "order_status",
+      "order_placed_datetime",
+      "results_ready_datetime",
+      "turnaround_mins"
+    ]
+  };
 }
 
 config {
@@ -18,7 +37,7 @@ WITH
   cte_read_data AS (
     SELECT
       r.event_id,
-      r.encounter_dk,
+      en.encounter_bk AS encounter_bk,
       r.patient_id,
       r.doctor_id,
       r.facility_code,
@@ -34,6 +53,8 @@ WITH
       dept.dept_bk,
       o.ord_type_bk
     FROM ${ref("step_tbl_read_ancillary_order_fct")} AS r
+    LEFT JOIN ${ref("ENCOUNTER_FCT")} AS en
+      ON r.visit_id = en.encounter_id
     LEFT JOIN ${ref("patient_dim")} AS p
       ON p.ptnt_bk = CONCAT('MTRXB5<>', CAST(r.patient_id AS STRING))
     LEFT JOIN ${ref("doctor_dim")} AS d
@@ -50,7 +71,7 @@ WITH
     SELECT
       ${fn_calculateHash(source.dk)} AS order_dk,
       ${fn_calculateConcat(source.bk)} AS order_bk,
-      encounter_dk AS encounter_bk,
+      encounter_bk AS encounter_bk,
       p.ptnt_bk,
       d.ordering_doc_bk,
       f.facility_bk,
