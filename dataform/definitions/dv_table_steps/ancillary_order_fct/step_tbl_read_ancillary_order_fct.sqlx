@@ -1,0 +1,30 @@
+js {
+  const { source } = require("definitions/param/source/ancillary_order_fct.js");
+  const glb_env = require("includes/glb_env.js");
+}
+
+config {
+  type: "table",
+  name: "step_tbl_read_ancillary_order_fct",
+  schema: glb_env.datasets.staging,
+  description: "Reads ancillary order event records and joins encounter keys.",
+  tags: ["ancillary_order", "fct"]
+}
+
+SELECT
+  e.event_id,
+  e.visit_id,
+  en.encounter_bk AS encounter_dk,
+  e.patient_id,
+  e.doctor_id,
+  e.facility_code,
+  e.department_code,
+  e.ref_code,
+  e.event_date,
+  e.actual_start_time,
+  e.end_time,
+  e.order_status
+FROM ${ref(source.source_table_event)} AS e
+LEFT JOIN ${ref(source.source_table_encounter)} AS en
+  ON e.visit_id = en.encounter_id
+WHERE e.event_type IN ('ANCILLARY_ORDER', 'ancillary_type')
