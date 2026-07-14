@@ -3,25 +3,22 @@ js {
   const { source } = require("definitions/param/source/date_ref.js");
 }
 
-
 config {
     type: "table",
     schema: glb_env.datasets.staging,
-    name: "step_tbl_read_ref_date",
-    description: "Reads date reference data for festival and public holiday context.",
+    name: "step_tbl_read_date_dim",
+    description: "Reads the date reference source used to build the conformed calendar dimension.",
     tags: ["conformed", "date", "dim"]
 }
 
--- The query is now structured to join all required source tables.
-WITH
-    cte_date_ref AS (
-        -- Step 1a: Select new/updated data from the date reference table.
-        SELECT 
-            holiday_date,
-            event_type
-        FROM ${ref(source.source_table_reference_date)}
-    )
+WITH cte_date_reference AS (
+    SELECT
+        CAST(holiday_date AS DATE) AS holiday_date,
+        CAST(event_type AS STRING) AS event_type
+    FROM ${ref(source.source_table_reference_date)}
+)
 
-
--- Final step: Select all columns from the final, enriched dataset.
-SELECT * FROM cte_date_ref
+SELECT
+    holiday_date,
+    event_type
+FROM cte_date_reference
