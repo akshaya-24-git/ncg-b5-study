@@ -22,14 +22,14 @@ config {
 WITH cte_dept_read AS (
     SELECT
         department_code,
-        facility_code,
         department_name,
         department_type,
-        head_doctor_id,
         dept_capacity,
+        head_doctor_id,
+        facility_code,
         is_dept_active,
         last_updated
-    FROM ${ref("step_tbl_read_dept_dim")}
+    FROM ${ref("step_tbl_read_department_dim")}
 ),
 cte_dept_transform AS (
     SELECT
@@ -39,7 +39,7 @@ cte_dept_transform AS (
         INITCAP(TRIM(department_name)) AS dept_name,
         department_type AS dept_type,
         COALESCE(TRIM(head_doctor_id), 'UNASSIGNED') AS dept_head_doc_code,
-        dept_capacity AS capacity,
+        CAST(dept_capacity AS NUMERIC) AS capacity,
         CASE WHEN is_dept_active THEN 'Y' ELSE 'N' END AS current_ind,
         last_updated AS valid_from_ts,
         CAST('9999-12-31 23:59:59' AS TIMESTAMP) AS valid_to_ts,
