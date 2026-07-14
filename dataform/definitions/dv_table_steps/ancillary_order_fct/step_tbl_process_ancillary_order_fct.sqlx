@@ -6,20 +6,14 @@ js {
   const source = {
     dk: [
       "'MTRXB5'",
-      "encounter_dk",
+      "encounter_fk",
       "event_id",
       "CURRENT_TIMESTAMP()"
     ],
     bk: [
       "'MTRXB5'",
-      "encounter_dk",
+      "encounter_fk",
       "event_id"
-    ],
-    hash_diff: [
-      "order_status",
-      "order_placed_datetime",
-      "results_ready_datetime",
-      "turnaround_mins"
     ]
   };
 }
@@ -37,7 +31,7 @@ WITH
   cte_read_data AS (
     SELECT
       r.event_id,
-      en.encounter_bk AS encounter_bk,
+      CONCAT('MTRXB5<>', CAST(r.visit_id AS STRING)) AS encounter_fk,
       r.patient_id,
       r.doctor_id,
       r.facility_code,
@@ -47,14 +41,12 @@ WITH
       r.actual_start_time,
       r.end_time,
       r.order_status,
-      p.ptnt_bk,
-      d.doc_bk AS ordering_doc_bk,
-      f.facility_bk,
-      dept.dept_bk,
-      o.ord_type_bk
+      p.ptnt_bk AS ptnt_fk,
+      d.doc_bk AS ordering_doc_fk,
+      f.facility_bk AS facility_fk,
+      dept.dept_bk AS dept_fk,
+      o.ord_type_bk AS order_type_fk
     FROM ${ref("step_tbl_read_ancillary_order_fct")} AS r
-    LEFT JOIN ${ref("ENCOUNTER_FCT")} AS en
-      ON r.visit_id = en.encounter_id
     LEFT JOIN ${ref("patient_dim")} AS p
       ON p.ptnt_bk = CONCAT('MTRXB5<>', CAST(r.patient_id AS STRING))
     LEFT JOIN ${ref("doctor_dim")} AS d
@@ -71,13 +63,13 @@ WITH
     SELECT
       ${fn_calculateHash(source.dk)} AS order_dk,
       ${fn_calculateConcat(source.bk)} AS order_bk,
-      encounter_bk AS encounter_bk,
-      p.ptnt_bk,
-      d.ordering_doc_bk,
-      f.facility_bk,
-      dept.dept_bk,
-      o.ord_type_bk,
-      CAST(event_date AS DATE) AS order_date_bk,
+      encounter_fk AS encounter_fk,
+      ptnt_fk,
+      ordering_doc_fk,
+      facility_fk,
+      dept_fk,
+      order_type_fk,
+      CAST(event_date AS DATE) AS order_date_fk,
       actual_start_time AS order_placed_datetime,
       end_time AS results_ready_datetime,
       CAST(TIMESTAMP_DIFF(end_time, actual_start_time, MINUTE) AS NUMERIC) AS turnaround_mins,
@@ -89,17 +81,16 @@ WITH
 SELECT
   order_dk,
   order_bk,
-  encounter_bk,
-  ptnt_bk,
-  ordering_doc_bk,
-  facility_bk,
-  dept_bk,
-  order_type_bk,
-  order_date_bk,
+  encounter_fk,
+  ptnt_fk,
+  ordering_doc_fk,
+  facility_fk,
+  dept_fk,
+  order_type_fk,
+  order_date_fk,
   order_placed_datetime,
   results_ready_datetime,
   turnaround_mins,
   order_status,
-  load_ts,
-  ${fn_calculateHash(source.hash_diff)} AS hash_diff
+  load_ts
 FROM cte_transformed

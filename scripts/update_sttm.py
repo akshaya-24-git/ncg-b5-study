@@ -42,7 +42,29 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Update STTM workbook sheet from CSV')
     parser.add_argument('--workbook', required=True, help='Path to STTM workbook (.xlsx)')
     parser.add_argument('--sheet', required=True, help='Sheet name to overwrite/create')
-    parser.add_argument('--csv', required=True, help='CSV file path containing new sheet rows')
+    parser.add_argument('--csv', help='CSV file path containing new sheet rows (if omitted, looks in ./ncg-b6-study)')
+    parser.add_argument('--materialize', action='store_true', help='When set, actually write changes to the workbook')
+    parser.add_argument('--in-dir', default=str(Path.cwd() / 'ncg-b6-study'), help='Input directory to read CSVs from when not explicitly provided')
+    parser.add_argument('--preview-rows', type=int, default=5, help='Number of rows to show in dry-run preview')
     args = parser.parse_args()
-    write_sheet_from_csv(args.workbook, args.sheet, args.csv)
-    print(f'Wrote sheet {args.sheet} to {args.workbook} from {args.csv}')
+
+    if args.csv:
+        csv_path = Path(args.csv)
+    else:
+        csv_path = Path(args.in_dir) / f"{args.sheet}.csv"
+
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
+
+    # Dry-run mode: do not touch workbook unless --materialize
+    if not args.materialize:
+        with open(csv_path, newline='', encoding='utf-8') as fh:
+            reader = csv.reader(fh)
+            rows = list(reader)
+        print(f"Dry-run: {len(rows)} rows found in {csv_path}. Preview (first {args.preview_rows} rows):")
+        for r in rows[:args.preview_rows]:
+            print(r)
+        print("To persist these changes into the workbook, re-run with --materialize.")
+    else:
+        write_sheet_from_csv(args.workbook, args.sheet, csv_path)
+        print(f'Wrote sheet {args.sheet} to {args.workbook} from {csv_path}')
