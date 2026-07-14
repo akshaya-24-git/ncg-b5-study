@@ -181,6 +181,58 @@ Saying "use my STTM, not your own heuristics" is helpful, but the strongest sign
 3. Add a `dataform compile` validation step.
 4. If you want, I can now update the README with exact command examples and add a repo-level `CONTRIBUTING.md` for future agent prompts.
 
+**Production Study Documentation**
+
+- **Purpose & Scope:** Provide a reproducible, auditable analytics study that transforms operational sources into canonical dimensions, bridges, and fact pipelines while preserving a strict external contract (STTM). This repo contains the code, metadata, and safe orchestration to run the study in production or to dry-run for review.
+
+- **Architecture (generic):**
+   - **Ingest layer:** `step_tbl_read_*` assets stage source rows into predictable shapes.
+   - **Transform layer:** `step_tbl_process_*` assets apply CTE-first transforms, normalization, DK/BK/hash generation, and derived metrics.
+   - **Load layer:** `step_tbl_write_*` assets invoke shared loader helpers to perform SCD1/SCD2 or operational loads.
+   - **Metadata & Helpers:** parameter files in `dataform/definitions/param/` and `dataform/includes/functions.js` centralize key logic and environment config.
+
+- **Runbook (commands):**
+   - **Local compile / validation:**
+```bash
+dataform compile
+```
+   - **Dry-run STTM extraction:**
+```bash
+python scripts/read_sttm.py --out-dir tmp/sttm --dry-run
+```
+   - **Apply STTM updates (explicit):**
+```bash
+python scripts/update_sttm.py --in-dir updated_csv --materialize
+```
+   - **Materialize Dataform artifacts:** run Dataform in CI or local environment with secure credentials; ensure materialization is gated and requires explicit confirmation.
+
+- **Data Contracts & Governance:**
+   - Keep an authoritative STTM workbook or a repo-native YAML manifest listing target columns, BK/DK definitions, and coefficient values.
+   - Validate parameter files before materialization: confirm `dk`, `bk`, and `hash_diff` arrays match the contract.
+
+- **Testing & Validation:**
+   - Add unit/regression checks for `step_tbl_process_*` transforms using small sample datasets.
+   - Run `dataform compile` in CI, and add post-load checks for null rates, uniqueness of BK/DK, and referential integrity.
+
+- **Materialization Safety:**
+   - Default to dry-run for extraction and update scripts; require `--materialize` for writes.
+   - Use separate staging and target datasets and restrict production target access via IAM and review gates.
+
+- **CI / Automation Recommendations:**
+   - Add a CI workflow that runs `dataform compile`, linting, and a minimal integration test suite.
+   - Gate `apply` jobs behind code review and green tests.
+
+- **Troubleshooting & Common Checks:**
+   - Verify BK ordering and BK/DK correspondence before loading; ordering mismatches break SCD logic.
+   - Ensure `fn_calculateHash`/`fn_calculateConcat` inputs are in sync with parameter arrays.
+   - Confirm loader functions expect the correct column names and types before invoking write steps.
+
+- **Contributing & Next Steps:**
+   - Add a `CONTRIBUTING.md` with developer build/run steps, local test dataset instructions, and STTM manifest guidance.
+   - I can extract exact column lists per `step_tbl_process_*`, scaffold tests, or convert this section into `CONTRIBUTING.md` on request.
+
+Progress: production documentation drafted and inserted into `README.md`.
+
 **DV Table Steps: File-by-file**
 
 - **department_dim**: [dataform/definitions/dv_table_steps/department_dim/step_tbl_read_department_dim.sqlx](dataform/definitions/dv_table_steps/department_dim/step_tbl_read_department_dim.sqlx), [dataform/definitions/dv_table_steps/department_dim/step_tbl_process_department_dim.sqlx](dataform/definitions/dv_table_steps/department_dim/step_tbl_process_department_dim.sqlx), [dataform/definitions/dv_table_steps/department_dim/step_tbl_write_department_dim.sqlx](dataform/definitions/dv_table_steps/department_dim/step_tbl_write_department_dim.sqlx) — Purpose: ingest facility department source, normalize names, generate DK/BK/hash_diff and SCD2-ready columns. State: implemented. Caveats: uses `fn_calculateHash`/`fn_calculateConcat` helpers and SCD2 loader; verify BK order matches STTM.
