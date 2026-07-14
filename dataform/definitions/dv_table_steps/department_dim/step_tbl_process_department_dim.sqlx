@@ -1,0 +1,77 @@
+js {
+    const glb_env = require("includes/glb_env.js");
+    const {
+        source: source,
+    } = require("definitions/param/source/ehr_facility_dept.js");
+
+    let {
+        dv_env_vars,
+        fn_calculateHash,
+        fn_calculateConcat,
+    } = require("includes/functions.js");
+}
+
+config {
+    type: "table",
+    name: "step_tbl_process_dept_dim",
+    schema: glb_env.datasets.staging,
+    dependencies: ["step_tbl_read_dept_dim"],
+    tags: ["dept", "conformed", "dim"]
+}
+
+WITH cte_dept_read AS (
+    SELECT
+        department_code,
+        facility_code,
+        department_name,
+        department_type,
+        head_doctor_id,
+        dept_capacity,
+        is_dept_active,
+        last_updated
+    FROM ${ref("step_tbl_read_dept_dim")}
+),
+cte_dept_transform AS (
+    SELECT
+        ${fn_calculateHash(source.dk)} AS dept_dk,
+        ${fn_calculateConcat(source.bk)} AS dept_bk,
+        ${fn_calculateHash(source.hash_diff)} AS hash_diff,
+        INITCAP(TRIM(department_name)) AS dept_name,
+        department_type AS dept_type,
+        COALESCE(TRIM(head_doctor_id), 'UNASSIGNED') AS dept_head_doc_code,
+        dept_capacity AS capacity,
+        CASE WHEN is_dept_active THEN 'Y' ELSE 'N' END AS current_ind,
+        last_updated AS valid_from_ts,
+        CAST('9999-12-31 23:59:59' AS TIMESTAMP) AS valid_to_ts,
+        CURRENT_TIMESTAMP() AS load_ts
+    FROM cte_dept_read
+),
+cte_final AS (
+    SELECT
+        dept_dk,
+        dept_bk,
+        hash_diff,
+        dept_name,
+        dept_type,
+        dept_head_doc_code,
+        capacity,
+        current_ind,
+        valid_from_ts,
+        valid_to_ts,
+        load_ts
+    FROM cte_dept_transform
+)
+
+SELECT
+    dept_dk,
+    dept_bk,
+    hash_diff,
+    dept_name,
+    dept_type,
+    dept_head_doc_code,
+    capacity,
+    current_ind,
+    valid_from_ts,
+    valid_to_ts,
+    load_ts
+FROM cte_final
