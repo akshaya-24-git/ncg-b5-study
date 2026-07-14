@@ -1,114 +1,77 @@
 js {
-    const {
-        source: source_config
-    } = require("definitions/param/source/date_ref.js");
-    const { glb_env } = require("includes/glb_env.js");
+    const { source: source_config } = require("definitions/param/source/date_ref.js");
+    const glb_env = require("includes/glb_env.js");
     const { fn_calculateHash } = require("includes/functions.js");
 }
 
 config {
     type: "table",
     name: "step_tbl_process_date_dim",
-    schema: dataform.projectConfig.vars.stagingDataset,
-    dependencies: ["step_tbl_read_ref_date"],
-    description: "Enterprise Calendar Dimension for healthcare cohort and ED spike analysis.",
+    schema: glb_env.datasets.staging,
+    dependencies: ["step_tbl_read_date_dim"],
+    description: "Builds the conformed date dimension from a generated calendar grid and date reference enrichment.",
     bigquery: {
-        // Clusters by date_dk to optimize your multi-table health joins later
         clusterBy: ["date_dk"]
     },
     tags: ["conformed", "date", "dim"]
 }
 
-
 WITH
-    grid_generator AS (
-    -- 1. Generates a continuous array of dates from 2022 through 2025
-    SELECT 
-        calendar_date
-    FROM 
-        UNNEST(GENERATE_DATE_ARRAY('2022-01-01', '2025-12-31')) AS calendar_date
+    cte_calendar_grid AS (
+        SELECT calendar_date
+        FROM UNNEST(GENERATE_DATE_ARRAY('2022-01-01', '2025-12-31')) AS calendar_date
     ),
 
-    date_attributes_calculated AS (
-    -- 2. Extract standard calendar components using BigQuery Date Functions
-    SELECT
-        calendar_date AS full_date,
-        FORMAT_DATE('%A', calendar_date) AS day_of_week,
-        
-        -- 1 = Sunday, 7 = Saturday
-        EXTRACT(DAYOFWEEK FROM calendar_date) AS day_of_week_num,
-        
-        -- ISO Week component
-        EXTRACT(WEEK FROM calendar_date) AS week_of_year,
-        EXTRACT(MONTH FROM calendar_date) AS month_num,
-        FORMAT_DATE('%B', calendar_date) AS month_name,
-        EXTRACT(QUARTER FROM calendar_date) AS quarter_num,
-        EXTRACT(YEAR FROM calendar_date) AS year_num,
-        
-        -- Fiscal Year Offset Example (Assuming fiscal starts in April, shift by 9 months)
-        EXTRACT(YEAR FROM DATE_ADD(calendar_date, INTERVAL 9 MONTH)) AS fiscal_year,
-        
-        -- Weekend flag check
-        CASE 
-        WHEN EXTRACT(DAYOFWEEK FROM calendar_date) IN (1, 7) THEN TRUE 
-        ELSE FALSE 
-        END AS is_weekend
-    FROM
-        grid_generator
-    ),
-
-
-    cte_read_data AS (
-
+    cte_calendar_attributes AS (
         SELECT
-            *
-        FROM
-            ${ref("step_tbl_read_ref_date")}
+            calendar_date AS full_date,
+            FORMAT_DATE('%A', calendar_date) AS day_of_week,
+            EXTRACT(DAYOFWEEK FROM calendar_date) AS day_of_week_num,
+            EXTRACT(WEEK FROM calendar_date) AS week_of_year,
+            EXTRACT(MONTH FROM calendar_date) AS month_num,
+            FORMAT_DATE('%B', calendar_date) AS month_name,
+            EXTRACT(QUARTER FROM calendar_date) AS quarter_num,
+            EXTRACT(YEAR FROM calendar_date) AS year_num,
+            EXTRACT(YEAR FROM DATE_ADD(calendar_date, INTERVAL 9 MONTH)) AS fiscal_year,
+            CASE
+                WHEN EXTRACT(DAYOFWEEK FROM calendar_date) IN (1, 7) THEN TRUE
+                ELSE FALSE
+            END AS is_weekend
+        FROM cte_calendar_grid
     ),
 
+    cte_reference_input AS (
+        SELECT
+            CAST(holiday_date AS DATE) AS holiday_date,
+            CAST(event_type AS STRING) AS event_type
+        FROM ${ref("step_tbl_read_date_dim")}
+    ),
 
     cte_final_transformed AS (
-
-        -- 3. Final selection merging with your b5_HIS.date_ref lookup
         SELECT
-
-        -- Calculate hash for dk
-        ${fn_calculateHash(source_config.dk)} AS date_dk,
-        
-        base.full_date,
-        base.day_of_week,
-        base.day_of_week_num,
-        base.week_of_year,
-        base.month_num,
-        base.month_name,
-        base.quarter_num,
-        base.year_num,
-        base.fiscal_year,
-        base.is_weekend,
-        
-        -- Handle structural holiday flag mapping
-        CASE 
-            WHEN ref.event_type = 'HOLIDAY' THEN TRUE 
-            ELSE FALSE 
-        END AS is_holiday,
-        
-        -- Handle your new V3 regional/cultural festival requirement
-        CASE 
-            WHEN ref.event_type = 'FESTIVAL' THEN TRUE 
-            ELSE FALSE 
-        END AS is_festival
-
-        FROM
-        date_attributes_calculated base
-        LEFT JOIN 
-        -- Pulls from your raw lookup dataset using global environment settings
-        cte_read_data ref
-        ON base.full_date = ref.holiday_date
+            ${fn_calculateHash(source_config.dk)} AS date_dk,
+            base.full_date,
+            base.day_of_week,
+            base.day_of_week_num,
+            base.week_of_year,
+            base.month_num,
+            base.month_name,
+            base.quarter_num,
+            base.year_num,
+            base.fiscal_year,
+            base.is_weekend,
+            CASE
+                WHEN ref.event_type = 'HOLIDAY' THEN TRUE
+                ELSE FALSE
+            END AS is_holiday,
+            CASE
+                WHEN ref.event_type = 'FESTIVAL' THEN TRUE
+                ELSE FALSE
+            END AS is_festival
+        FROM cte_calendar_attributes AS base
+        LEFT JOIN cte_reference_input AS ref
+            ON base.full_date = ref.holiday_date
     )
 
-
--- Final Select from the fully processed data
-SELECT
-    *
-FROM
-    cte_final_transformed
+SELECT *
+FROM cte_final_transformed

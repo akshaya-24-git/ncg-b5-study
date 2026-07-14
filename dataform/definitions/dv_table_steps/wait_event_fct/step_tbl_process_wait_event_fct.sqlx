@@ -1,0 +1,124 @@
+js {
+    const glb_env = require("includes/glb_env.js");
+    const {
+        source
+    } = require("definitions/param/source/ehr_event.js");
+    const {
+        fn_calculateHash,
+        fn_calculateConcat
+    } = require("includes/functions.js");
+}
+
+config {
+    type: "table",
+    schema: dataform.projectConfig.vars.stagingDataset,
+    name: "step_tbl_process_wait_event_fct",
+    dependencies: ["step_tbl_read_wait_event_fct"],
+    description: "Preparing the required data from dimensions and source tables.",
+    tags: ["f_wait_time", "fct"]
+}
+
+WITH
+  cte_read AS (
+  SELECT
+    visit_id,
+    event_id,
+    doctor_id,
+    event_sequence,
+    patient_id,
+    facility_code,
+    department_code,
+    ref_code,
+    event_date,
+    service_start_time,
+    actual_start_time,
+    end_time
+  FROM
+    ${ref("step_tbl_read_wait_event_fct")} ),
+  cte_transform AS (
+  SELECT
+    (TO_HEX(MD5(TRIM(COALESCE(CAST('MTRX5' AS STRING), 'NULL_REPLACED'))||"~"||TRIM(COALESCE(CAST(visit_id AS STRING), 'NULL_REPLACED'))||"~"||TRIM(COALESCE(CAST(event_id AS STRING), 'NULL_REPLACED'))||"~"||TRIM(COALESCE(CAST(CURRENT_TIMESTAMP() AS STRING), 'NULL_REPLACED'))))) AS wait_event_time_dk,
+    ((COALESCE(CAST('MTRX5' AS STRING), 'NULL_REPLACED')||"<>"||COALESCE(CAST(visit_id AS STRING), 'NULL_REPLACED')||"<>"||COALESCE(CAST(event_id AS STRING), 'NULL_REPLACED'))) AS wait_event_time_bk,
+    event_sequence AS event_sequence,
+    CONCAT('MTRXB5<>', CAST(r.visit_id AS STRING)) AS encounter_fk,
+    d.doc_bk AS doc_fk,
+    p.ptnt_bk AS ptnt_fk,
+    f.facility_bk AS facility_fk,
+    dept.dept_bk AS dept_fk,
+    s.srv_stage_bk AS srv_stage_fk,
+    s.sla_wait_threshold AS sla_wait_threshold,
+    da.full_date AS event_date_fk,
+    r.service_start_time AS service_start_time,
+    r.actual_start_time AS actual_start_time,
+    r.end_time AS end_time,
+    CAST(TIMESTAMP_DIFF(r.end_time, r.actual_start_time, MINUTE) AS NUMERIC) AS service_duration_mins,
+    CAST(TIMESTAMP_DIFF(r.actual_start_time, r.service_start_time, MINUTE) AS NUMERIC) AS wait_duration_mins
+    -- 2. FIXED: Removed trailing comma
+  FROM
+    cte_read r
+  LEFT JOIN
+    `fy23-asc-addg-dataverse.b5_HIS_t.date_dim` da 
+  ON da.full_date = r.event_date 
+  LEFT JOIN
+    `fy23-asc-addg-dataverse.b5_HIS_t.doctor_dim` d
+  ON
+    d.doc_bk = CONCAT('MTRXB5<>', CAST(r.doctor_id AS STRING))
+  LEFT JOIN
+    `fy23-asc-addg-dataverse.b5_HIS_t.facility_dim` f
+  ON
+    f.facility_bk = CONCAT('MTRXB5<>', CAST(r.facility_code AS STRING))
+  LEFT JOIN
+    `fy23-asc-addg-dataverse.b5_HIS_t.department_dim` dept
+  ON
+    dept.dept_bk = CONCAT('MTRXB5<>', CAST(r.department_code AS STRING),'<>', CAST(r.facility_code AS STRING))
+  LEFT JOIN
+    `fy23-asc-addg-dataverse.b5_HIS_t.service_stage_dim` s
+  ON
+    s.srv_stage_bk = CONCAT('MTRXB5<>', CAST(r.ref_code AS STRING))
+  LEFT JOIN
+    `fy23-asc-addg-dataverse.b5_HIS_t.patient_dim` p
+  ON
+    p.ptnt_bk = CONCAT('MTRXB5<>', CAST(r.patient_id AS STRING)) where p.current_ind = 'TRUE' ),
+  cte_final AS (
+  SELECT
+    wait_event_time_dk,
+    wait_event_time_bk,
+    event_sequence,
+    encounter_fk,
+    doc_fk,
+    ptnt_fk,
+    facility_fk,
+    dept_fk,
+    srv_stage_fk,
+    event_date_fk,
+    service_start_time,
+    actual_start_time,
+    end_time,
+    service_duration_mins,
+    wait_duration_mins,
+  IF
+    (wait_duration_mins > sla_wait_threshold, TRUE, FALSE) AS breach_flag
+  FROM
+    cte_transform
+    -- 3. FIXED: Added missing FROM clause
+    )
+  SELECT
+    wait_event_time_dk,
+    wait_event_time_bk,
+    event_sequence,
+    encounter_fk,
+    doc_fk,
+    ptnt_fk,
+    facility_fk,
+    dept_fk,
+    srv_stage_fk,
+    event_date_fk,
+    service_start_time,
+    actual_start_time as actual_service_start_time,
+    end_time as service_end_time,
+    service_duration_mins,
+    wait_duration_mins,
+    breach_flag,
+    CURRENT_TIMESTAMP() AS load_ts
+  FROM
+    cte_final

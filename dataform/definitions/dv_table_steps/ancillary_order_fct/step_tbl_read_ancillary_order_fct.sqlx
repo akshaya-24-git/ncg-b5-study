@@ -1,0 +1,43 @@
+js {
+  const glb_env = require("includes/glb_env.js");
+  const { source } = require("definitions/param/source/ehr_event.js");
+}
+
+config {
+    type: "table",
+    schema: glb_env.datasets.staging,
+    name: "step_tbl_read_ancillary_order_fct",
+    description: "Getting the required data from dimensions and source tables.",
+    tags: ["fct", "f_ancillary_order"]
+}
+
+WITH cte_read AS (
+  SELECT 
+    visit_id,
+    event_id,
+    doctor_id,
+    patient_id,
+    facility_code,
+    department_code,
+    ref_code,
+    event_date,
+    actual_start_time,
+    end_time,
+    order_status
+  FROM `fy23-asc-addg-dataverse.b5_HIS.EHR_EVENT`
+  WHERE event_type in ('ANCILLARY_ORDER','ancillary_type')
+)
+
+SELECT 
+  visit_id,
+  event_id,
+  doctor_id,
+  patient_id,
+  facility_code,
+  department_code,
+  ref_code,
+  event_date,
+  actual_start_time,
+  end_time,
+  order_status
+FROM cte_read

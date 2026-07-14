@@ -1,0 +1,35 @@
+js {
+  const glb_env = require("includes/glb_env.js");
+  const { source } = require("definitions/param/source/ehr_bed.js");
+}
+
+config {
+    type: "table",
+    name: "step_tbl_read_bed_dim",
+    schema: glb_env.datasets.staging,
+    description: "Reads Bed details from ehr_bed table",
+    tags: ["bed", "conformed", "dim"]
+}
+
+WITH
+    cte_bed AS (
+        SELECT
+            bed_id,
+            bed_category,
+            ac_status,
+            sharing_capacity,
+            operational_status,
+            room_no,
+            floor_no
+        FROM ${ref(source.source_table)}
+    )
+
+SELECT
+    bed_id,
+    bed_category,
+    ac_status,
+    sharing_capacity,
+    operational_status,
+    room_no,
+    floor_no
+FROM cte_bed;

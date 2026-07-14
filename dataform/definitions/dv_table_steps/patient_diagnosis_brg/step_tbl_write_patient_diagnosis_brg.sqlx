@@ -1,0 +1,25 @@
+js {
+  const { projectConfig, datasets } = require("includes/glb_env.js");
+  const { fn_SCD2load } = require("includes/functions.js");
+  const { target } = require("definitions/param/target/patient_diagnosis_brg.js");
+}
+
+config {
+  type: "operations",
+  hasOutput: true,
+  name: "step_tbl_write_patient_diagnosis_brg",
+  schema: dataform.projectConfig.vars.stagingDataset,
+  dependencies: ["step_tbl_process_patient_diagnosis_brg"],
+  description: "Loads the patient diagnosis bridge into the target dataset using SCD2.",
+  tags: ["patient", "diagnosis", "bridge", "scd2"]
+}
+
+${fn_SCD2load({
+  source_ref: ref("step_tbl_process_patient_diagnosis_brg"),
+  target_name: target.target_table,
+  project_id: projectConfig.projectName,
+  tgt_dataset: datasets.target,
+  hash_column: target.hashdiff,
+  natural_key: target.bk[0],
+  target_params: target
+})}
