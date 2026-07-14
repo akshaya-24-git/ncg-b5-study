@@ -1,0 +1,84 @@
+js {
+  const { source } = require("definitions/param/source/ancillary_order_fct.js");
+  const { target } = require("definitions/param/target/ancillary_order_fct.js");
+  const { fn_calculateHash, fn_calculateConcat } = require("includes/functions.js");
+  const glb_env = require("includes/glb_env.js");
+}
+
+config {
+  type: "table",
+  name: "step_tbl_process_ancillary_order_fct",
+  schema: glb_env.datasets.staging,
+  dependencies: ["step_tbl_read_ancillary_order_fct"],
+  description: "Processes ancillary order event records and computes target keys using dimension lookups.",
+  tags: ["ancillary_order", "fct"]
+}
+
+WITH
+  cte_read_data AS (
+    SELECT
+      r.event_id,
+      r.encounter_dk,
+      r.patient_id,
+      r.doctor_id,
+      r.facility_code,
+      r.department_code,
+      r.ref_code,
+      r.event_date,
+      r.actual_start_time,
+      r.end_time,
+      r.order_status,
+      p.ptnt_bk,
+      d.doc_bk AS ordering_doc_bk,
+      f.facility_bk,
+      dept.dept_bk,
+      o.ord_type_bk
+    FROM ${ref("step_tbl_read_ancillary_order_fct")} AS r
+    LEFT JOIN ${ref("patient_dim")} AS p
+      ON p.ptnt_bk = CONCAT('MTRXB5<>', CAST(r.patient_id AS STRING))
+    LEFT JOIN ${ref("doctor_dim")} AS d
+      ON d.doc_bk = CONCAT('MTRXB5<>', CAST(r.doctor_id AS STRING))
+    LEFT JOIN ${ref("facility_dim")} AS f
+      ON f.facility_bk = CONCAT('MTRXB5<>', CAST(r.facility_code AS STRING))
+    LEFT JOIN ${ref("department_dim")} AS dept
+      ON dept.dept_bk = CONCAT('MTRXB5<>', CAST(r.department_code AS STRING), '<>', CAST(r.facility_code AS STRING))
+    LEFT JOIN ${ref("order_type_dim")} AS o
+      ON o.ord_type_bk = CONCAT('MTRXB5<>', CAST(r.ref_code AS STRING))
+  ),
+
+  cte_transformed AS (
+    SELECT
+      ${fn_calculateHash(source.dk)} AS order_dk,
+      ${fn_calculateConcat(source.bk)} AS order_bk,
+      encounter_dk AS encounter_bk,
+      p.ptnt_bk,
+      d.ordering_doc_bk,
+      f.facility_bk,
+      dept.dept_bk,
+      o.ord_type_bk,
+      CAST(event_date AS DATE) AS order_date_bk,
+      actual_start_time AS order_placed_datetime,
+      end_time AS results_ready_datetime,
+      CAST(TIMESTAMP_DIFF(end_time, actual_start_time, MINUTE) AS NUMERIC) AS turnaround_mins,
+      order_status,
+      CURRENT_TIMESTAMP() AS load_ts
+    FROM cte_read_data
+  )
+
+SELECT
+  order_dk,
+  order_bk,
+  encounter_bk,
+  ptnt_bk,
+  ordering_doc_bk,
+  facility_bk,
+  dept_bk,
+  order_type_bk,
+  order_date_bk,
+  order_placed_datetime,
+  results_ready_datetime,
+  turnaround_mins,
+  order_status,
+  load_ts,
+  ${fn_calculateHash(source.hash_diff)} AS hash_diff
+FROM cte_transformed

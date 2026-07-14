@@ -1,0 +1,21 @@
+js {
+  const { service_stage_source: source } = require("definitions/param/source/ehr_clinical_ref_data.js");
+  const glb_env = require("includes/glb_env.js");
+}
+
+config {
+  type: "table",
+  name: "step_tbl_read_service_stage_dim",
+  schema: glb_env.datasets.staging,
+  description: "Reads service stage rows from EHR_CLINICAL_REF_DATA with ref_type = 'SERVICE_STAGE'",
+  tags: ["service_stage", "dim"]
+}
+
+select
+  ref_code,
+  ref_name,
+  high_level_stage,
+  care_setting,
+  sla_threshold_mins
+from ${ref(source.source_table)}
+where ref_type = 'SERVICE_STAGE'

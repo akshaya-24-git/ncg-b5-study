@@ -1,0 +1,22 @@
+js {
+  const { fn_factLoad } = require("includes/functions.js");
+  const { projectConfig, datasets } = require("includes/glb_env.js");
+  const { target } = require("definitions/param/target/ancillary_order_fct.js");
+}
+
+config {
+  type: "operations",
+  name: "step_tbl_write_ancillary_order_fct",
+  dependencies: ["step_tbl_process_ancillary_order_fct"],
+  description: "Loads ancillary order fact rows into the final ancillary_order_fct table.",
+  tags: ["ancillary_order", "fct"]
+}
+
+${fn_factLoad({
+  source_ref: ref("step_tbl_process_ancillary_order_fct"),
+  target_name: "ancillary_order_fct",
+  project_id: projectConfig.projectName,
+  tgt_dataset: datasets.target,
+  natural_key: target.bk[0],
+  target_params: target
+})}

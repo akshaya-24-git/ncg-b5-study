@@ -67,6 +67,7 @@ const target = {
     update_list: [
         "ptnt_bk",
         "patient_id",
+        "hash_diff",
         "first_name",
         "last_name",
         "dob",
