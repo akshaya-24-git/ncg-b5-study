@@ -1,0 +1,141 @@
+js {
+  const glb_env = require("includes/glb_env.js");
+  const { source } = require("definitions/param/source/risk_score_fct.js");
+}
+
+config {
+    type: "table",
+    name: "step_tbl_read_risk_score_fct",
+    schema: glb_env.datasets.staging,
+    description: "Read layer parameterizing the Risk Score Fact; produces clinical, utilization, and financial arrays for downstream processing.",
+    tags: ["risk", "fact", "score"]
+}
+
+-- 1. HARDCODED TEMPORAL ANCHOR (aligns with STTM workbook snapshot)
+WITH cte_temporal_anchor AS (
+    SELECT
+        CAST(20241213 AS INT64) AS date_dk,
+        CAST('2024-12-13' AS DATE) AS date_bk,
+        CAST('2024-12-13' AS DATE) AS run_date
+),
+
+-- 2. ACTIVE PATIENT POOL
+cte_active_patients AS (
+    SELECT DISTINCT
+        CASE WHEN STARTS_WITH(patient_fk, 'MTRXB5<>') THEN patient_fk ELSE CONCAT('MTRXB5<>', patient_fk) END AS patient_fk
+    FROM ${ref('encounter_fct')}
+    WHERE patient_fk IS NOT NULL AND patient_fk != '-1'
+
+    UNION DISTINCT
+
+    SELECT DISTINCT
+        CASE WHEN STARTS_WITH(patient_fk, 'MTRXB5<>') THEN patient_fk ELSE CONCAT('MTRXB5<>', patient_fk) END AS patient_fk
+    FROM ${ref('claim_fct')}
+    WHERE patient_fk IS NOT NULL AND patient_fk != '-1'
+
+    UNION DISTINCT
+
+    SELECT DISTINCT
+        CASE WHEN STARTS_WITH(patient_fk, 'MTRXB5<>') THEN patient_fk ELSE CONCAT('MTRXB5<>', patient_fk) END AS patient_fk
+    FROM ${ref('patient_diagnosis_brg')}
+    WHERE patient_fk IS NOT NULL AND patient_fk != '-1'
+),
+
+-- 3. CLINICAL PILLAR: assemble diagnostic profile arrays
+cte_clinical_raw AS (
+    SELECT
+        CASE WHEN STARTS_WITH(brg.patient_fk, 'MTRXB5<>') THEN brg.patient_fk ELSE CONCAT('MTRXB5<>', brg.patient_fk) END AS patient_fk,
+        brg.bridge_bk AS bridge_bk,
+        brg.charlson_comorbidity_group,
+        brg.is_hrrp_condition,
+        brg.is_acsc_condition,
+        brg.chronic_flag,
+        brg.onset_date,
+        brg.resolution_date
+    FROM ${ref('patient_diagnosis_brg')} brg
+    CROSS JOIN cte_temporal_anchor t
+    WHERE brg.patient_fk != '-1'
+      AND CAST(brg.onset_date AS DATE) <= t.run_date
+      AND (brg.resolution_date IS NULL OR CAST(brg.resolution_date AS DATE) >= t.run_date)
+),
+
+-- 4. UTILIZATION PILLAR: encounters within trailing 12 months
+cte_utilization_raw AS (
+    SELECT
+        CASE WHEN STARTS_WITH(enc.patient_fk, 'MTRXB5<>') THEN enc.patient_fk ELSE CONCAT('MTRXB5<>', enc.patient_fk) END AS patient_fk,
+        enc.encounter_type,
+        enc.arrival_time,
+        t.run_date AS observation_date,
+        enc.is_festival
+    FROM ${ref('encounter_fct')} enc
+    CROSS JOIN cte_temporal_anchor t
+    WHERE SAFE_CAST(LEFT(REGEXP_REPLACE(CAST(enc.arrival_time AS STRING), r' UTC$', ''), 10) AS DATE)
+          BETWEEN DATE_SUB(t.run_date, INTERVAL 365 DAY) AND t.run_date
+      AND enc.patient_fk != '-1'
+),
+
+-- 5. FINANCIAL PILLAR: claims within trailing 12 months
+cte_financial_raw AS (
+    SELECT
+        CASE WHEN STARTS_WITH(cl.patient_fk, 'MTRXB5<>') THEN cl.patient_fk ELSE CONCAT('MTRXB5<>', cl.patient_fk) END AS patient_fk,
+        SAFE_CAST(cl.paid_amount AS FLOAT64) AS paid_amount,
+        CASE WHEN CAST(cl.denial_flag AS STRING) IN ('true','1') THEN TRUE ELSE FALSE END AS denial_flag
+    FROM ${ref('claim_fct')} cl
+    CROSS JOIN cte_temporal_anchor t
+    WHERE COALESCE(SAFE_CAST(cl.service_date_fk AS DATE), SAFE.PARSE_DATE('%Y%m%d', CAST(cl.service_date_fk AS STRING)))
+          BETWEEN DATE_SUB(t.run_date, INTERVAL 365 DAY) AND t.run_date
+      AND cl.patient_fk != '-1'
+),
+
+-- 6. ROLLUPS: package into arrays for downstream UNNEST
+cte_clinical_rollup AS (
+    SELECT
+        c.patient_fk,
+        MAX(c.bridge_bk) AS bridge_fk,
+        ARRAY_AGG(STRUCT(
+            c.charlson_comorbidity_group AS charlson_comorbidity_group,
+            CAST(c.is_hrrp_condition AS BOOLEAN) AS is_hrrp_condition,
+            CAST(c.is_acsc_condition AS BOOLEAN) AS is_acsc_condition,
+            CAST(c.chronic_flag AS BOOLEAN) AS chronic_flag
+        )) AS clinical_profile
+    FROM cte_clinical_raw c
+    GROUP BY c.patient_fk
+),
+
+cte_utilization_rollup AS (
+    SELECT
+        u.patient_fk,
+        ARRAY_AGG(STRUCT(
+            u.encounter_type AS encounter_type,
+            u.arrival_time AS arrival_time,
+            FALSE AS is_festival,
+            u.observation_date AS observation_date
+        )) AS utilization_profile
+    FROM cte_utilization_raw u
+    GROUP BY u.patient_fk
+),
+
+cte_financial_rollup AS (
+    SELECT
+        f.patient_fk,
+        ARRAY_AGG(STRUCT(
+            f.paid_amount AS paid_amount,
+            f.denial_flag AS denial_flag
+        )) AS financial_profile
+    FROM cte_financial_raw f
+    GROUP BY f.patient_fk
+)
+
+SELECT
+    ap.patient_fk,
+    dc.date_bk AS scoring_date_fk,
+    c.bridge_fk,
+    c.clinical_profile,
+    u.utilization_profile,
+    f.financial_profile
+FROM cte_active_patients ap
+CROSS JOIN cte_temporal_anchor dc
+LEFT JOIN cte_clinical_rollup c ON ap.patient_fk = c.patient_fk
+LEFT JOIN cte_utilization_rollup u ON ap.patient_fk = u.patient_fk
+LEFT JOIN cte_financial_rollup f ON ap.patient_fk = f.patient_fk
+WHERE (c.clinical_profile IS NOT NULL OR u.utilization_profile IS NOT NULL OR f.financial_profile IS NOT NULL)
