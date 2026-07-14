@@ -1,0 +1,94 @@
+js {
+  const {projectConfig,datasets} = require("includes/glb_env.js");
+  const { source } = require("definitions/param/source/hr_schedule.js");
+  const { fn_calculateHash,fn_calculateConcat} = require("includes/functions.js");
+  const { target } = require("definitions/param/target/encounter_fct.js");
+}
+
+config {
+    type: "table",
+    schema: dataform.projectConfig.vars.stagingDataset,
+    name: "step_tbl_process_doctor_schedule_fct",
+    dependencies: ["step_tbl_read_doctor_schedule_fct","step_tbl_write_encounter_fct"],
+    tags: ["f_doctor_schedule", "fct"]
+}
+
+with cte_docread as (
+  select 
+    schedule_id,
+    doctor_id,
+    facility_code,
+    department_code,
+    schedule_date,
+    scheduled_hours,
+    actual_hours_worked,
+    leave_hours,
+    schedule_type,
+    leave_type
+  from ${ref("step_tbl_read_doctor_schedule_fct")}
+),
+cte_patient_counts as (
+  select
+    fe.doctor_fk,
+    DATE(arrival_time) AS arrival_date,
+    count(distinct fe.patient_fk) as total_patients
+  from
+    `fy23-asc-addg-dataverse.b5_HIS_t.encounter_fct` as fe
+  group by
+    1,2
+),
+
+cte_doctransform as (
+  select 
+  ${fn_calculateHash(source.dk)} as doctor_schedule_dk,
+  ${fn_calculateConcat(source.bk)} as doctor_schedule_bk,
+    d.doc_bk as doctor_fk,
+    f.facility_bk as facility_fk,
+    dept.dept_bk as department_fk,
+    FORMAT_DATE('%Y%m%d', r.schedule_date) as schedule_date,
+    CAST(r.scheduled_hours AS NUMERIC) as scheduled_hours,
+    CAST(r.actual_hours_worked AS NUMERIC) as actual_hours_worked,
+    CAST(CASE WHEN r.actual_hours_worked > r.scheduled_hours THEN r.actual_hours_worked - r.scheduled_hours ELSE 0 END AS NUMERIC) as overtime_hours,
+    CAST(CASE WHEN r.leave_hours IS NULL OR CAST(r.leave_hours AS STRING) = 'null' THEN 0 ELSE r.leave_hours END AS NUMERIC) as leave_hours,
+    CAST(COALESCE(r.actual_hours_worked, 0) * COALESCE(d.hourly_rate, 0) AS NUMERIC) as labor_cost,
+    CAST(COALESCE(pc.total_patients, 0) as numeric) as patients_assign_count,
+    r.schedule_type as schedule_type,
+    r.leave_type as leave_type,
+    CASE WHEN r.leave_hours >= r.scheduled_hours THEN 'Y' ELSE 'N' END as is_absent,
+    CURRENT_TIMESTAMP() as load_ts
+
+  from cte_docread r
+
+  left join ${ref("doctor_dim")} d 
+    on d.doc_bk = CONCAT('MTRXB5<>', CAST(r.doctor_id AS STRING))
+    
+  left join ${ref("facility_dim")} f 
+    on f.facility_bk = CONCAT('MTRXB5<>', CAST(r.facility_code AS STRING))
+    
+  left join ${ref("department_dim")} dept 
+    on dept.dept_bk = CONCAT('MTRXB5<>', CAST(r.department_code AS STRING),'<>', CAST(r.facility_code AS STRING))
+
+  left join cte_patient_counts pc
+    on d.doc_bk = pc.doctor_fk 
+    and r.schedule_date = (pc.arrival_date)
+    
+)
+
+select 
+  doctor_schedule_dk,
+  doctor_schedule_bk,
+  doctor_fk,
+  facility_fk,
+  department_fk,
+  schedule_date,
+  scheduled_hours,
+  actual_hours_worked,
+  overtime_hours,
+  leave_hours,
+  labor_cost,
+  patients_assign_count,
+  schedule_type, 
+  leave_type,
+  is_absent,
+  load_ts
+from cte_doctransform
