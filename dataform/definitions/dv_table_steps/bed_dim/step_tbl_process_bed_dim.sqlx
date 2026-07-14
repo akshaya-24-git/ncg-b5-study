@@ -38,6 +38,9 @@ WITH
             TRIM(room_no) AS room_number,
             CAST(floor_no AS INT64) AS floor_number,
 
+            -- Compute the hashdiff at the transform layer so it's available downstream
+            ${fn_calculateHash(source_config.hashdiff)} AS hashdiff,
+
             CURRENT_TIMESTAMP AS load_ts
 
         FROM
@@ -49,7 +52,7 @@ WITH
         SELECT
             ${fn_calculateHash(source_config.dk)} AS bed_dk,
             ${fn_calculateConcat(source_config.bk)} AS bed_bk,
-            ${fn_calculateHash(source_config.hashdiff)} AS hashdiff,
+            hashdiff,
 
             CURRENT_TIMESTAMP() AS vld_fm_ts,
             TIMESTAMP '9999-12-31 23:59:59+00' AS vld_to_ts,
