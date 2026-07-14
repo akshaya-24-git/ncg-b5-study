@@ -1,0 +1,35 @@
+js {
+    const {
+        fn_factLoad
+    } = require("includes/functions.js");
+    const {
+        projectConfig,
+        datasets
+    } = require("includes/glb_env.js");
+
+    const {
+        target
+    } = require("definitions/param/target/doctor_schedule_fct.js");
+    const project_id = projectConfig.projectName;
+    const tgt_dataset = datasets.target;
+}
+
+config {
+    type: "operations",
+    name: "step_tbl_write_doctor_schedule_fct",
+    dependencies: ["step_tbl_process_doctor_schedule_fct"],
+    tags: ["f_doctor_schedule", "fct"]
+}
+
+  ${
+      fn_factLoad({
+          source_ref: ref("step_tbl_process_doctor_schedule_fct"),
+          target_name: "doctor_schedule_fct",
+          project_id: project_id,
+          tgt_dataset: tgt_dataset,
+          natural_key: target.bk[0],
+          target_params: target
+      })
+  }
+SELECT
+  1 AS placeholder
