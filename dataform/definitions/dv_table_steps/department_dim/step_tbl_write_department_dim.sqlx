@@ -1,0 +1,38 @@
+js {
+    const {
+        fn_SCD2load
+    } = require("includes/functions.js");
+    const {
+        projectConfig,
+        datasets
+    } = require("includes/glb_env.js");
+
+    const {
+        target
+    } = require("definitions/param/target/department_dim.js");
+
+    const project_id = projectConfig.projectName;
+    const tgt_dataset = datasets.target;
+}
+
+config {
+    type: "operations",
+    name: "step_tbl_write_dept_dim",
+    dependencies: ["step_tbl_process_dept_dim"],
+    tags: ["dept", "conformed", "dim"]
+}
+
+${
+    fn_SCD2load({
+        source_ref: ref("step_tbl_process_dept_dim"),
+        target_name: "department_dim",
+        project_id: project_id,
+        tgt_dataset: tgt_dataset,
+        hash_column: target.hash_diff[0],
+        natural_key: target.bk[0],
+        target_params: target
+    })
+}
+
+SELECT
+  1 AS placeholder
