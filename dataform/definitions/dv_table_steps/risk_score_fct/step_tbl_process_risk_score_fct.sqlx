@@ -129,7 +129,6 @@ cte_pre_serialize AS (
 cte_final AS (
     SELECT
         *,
-        ${fn_calculateHash(source_config.hash_diff)} AS hash_diff,
         CURRENT_TIMESTAMP() AS load_ts
     FROM cte_pre_serialize
 )
