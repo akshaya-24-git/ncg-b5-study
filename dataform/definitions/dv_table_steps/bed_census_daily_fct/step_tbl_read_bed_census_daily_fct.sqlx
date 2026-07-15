@@ -1,0 +1,43 @@
+js {
+  const glb_env = require("includes/glb_env.js");
+  const { source } = require("definitions/param/source/ehr_bed_occupancy.js");
+}
+
+config {
+    type: "table",
+    name: "step_tbl_read_bed_census_daily_fct",
+    schema: glb_env.datasets.staging,
+    description: "Reads bed occupancy and bed master data for the bed census daily fact.",
+    tags: ["bed", "fact", "census"]
+}
+
+WITH
+    cte_occupancy AS (
+        SELECT
+            o.occupancy_id,
+            o.census_date,
+            o.bed_id,
+            b.bed_category,
+            b.facility_code,
+            b.department_code,
+            o.patient_id,
+            o.bed_status,
+            o.patient_admit_date,
+            o.patient_discharge_date
+        FROM ${ref(source.source_table_occupancy)} AS o
+        LEFT JOIN ${ref(source.source_table_bed)} AS b
+            ON o.bed_id = b.bed_id
+    )
+
+SELECT
+    occupancy_id,
+    census_date,
+    bed_id,
+    bed_category,
+    facility_code,
+    department_code,
+    patient_id,
+    bed_status,
+    patient_admit_date,
+    patient_discharge_date
+FROM cte_occupancy;
