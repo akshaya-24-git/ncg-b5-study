@@ -1,0 +1,39 @@
+js {
+    const glb_env = require("includes/glb_env.js");
+    const { source } = require("definitions/param/source/ehr_diagnosis.js");
+}
+
+config {
+    type: "table",
+    schema: glb_env.datasets.staging,
+    name: "diagnosis_dim_read",
+    description: "diagnosis table is a master reference table that standardizes ICD-10 codes and enriches them with clinical flags (chronic, readmission risk, and comorbidity groups) for healthcare analytics.",
+    tags: ["diagnosis", "conformed", "dim"]
+}
+
+WITH
+  raw_diagnosis_data AS (
+  SELECT
+    icd10_code,
+    description,
+    clinical_category,
+    chronic_flag,
+    is_hrrp_condition,
+    is_acsc_condition,
+    charlson_comorbidity_group,
+    is_active,
+    last_updated
+  FROM
+    ${ref(source.table_name)})
+SELECT
+  icd10_code,
+  description,
+  clinical_category,
+  chronic_flag,
+  is_hrrp_condition,
+  is_acsc_condition,
+  charlson_comorbidity_group,
+  is_active,
+  last_updated
+FROM
+  raw_diagnosis_data

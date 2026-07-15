@@ -1,0 +1,92 @@
+
+js {
+    const {
+        source
+    } = require("definitions/param/source/ehr_diagnosis.js")
+
+    const {
+        fn_calculateHash,
+        fn_calculateConcat,
+        fn_getHashKey,
+        fn_ccl_enrich,
+        fn_setHistWhere,
+        fn_setIncrWhere,
+        fn_insertload,
+        fn_exceptionFind,
+        fn_getExceptionDK,
+        fn_generateExceptionSQL,
+        fn_exceptionLoad,
+        fn_auditBatchStart,
+        fn_auditJobStart,
+        fn_auditStepStart,
+        fn_auditStepEnd,
+        fn_auditJobEnd,
+        fn_auditBatchEnd,
+        fn_getSourceCommonCode,
+        fn_GetArrayVal,
+        fn_updateColCompareList,
+        fn_defineArrayList,
+        fn_getSK,
+        fn_getDefaultStr,
+        fn_SCD2load,
+        gbl_getLabels,
+        dv_env_vars,
+        fn_factLoad
+    } = require("includes/functions.js");
+
+}
+
+config {
+    type: "table",
+    name: "step_tbl_process_diagnosis_dim",
+    schema: glb_env.datasets.staging,
+    description: "Step 2: Core processing layer using explicitly imported JS functions",
+    tags: ["diagnosis", "conformed", "dim"]
+}
+
+WITH
+  src_ehr_diagnosis AS (
+  -- Step 1: Extract and sanitize raw fields from the source table
+  SELECT
+    TRIM(icd10_code) AS icd10_code,
+    description,
+    clinical_category,
+    CAST(chronic_flag AS BOOLEAN) AS chronic_flag,
+    CAST(is_hrrp_condition AS BOOLEAN) AS is_hrrp_condition,
+    CAST(is_acsc_condition AS BOOLEAN) AS is_acsc_condition,
+    charlson_comorbidity_group,
+    last_updated,
+    CURRENT_TIMESTAMP() AS current_ts
+  FROM
+    ${ref(source.table_name)} ),
+  transformed_diagnosis AS (
+  SELECT
+    TO_HEX(MD5(CONCAT( TRIM(COALESCE('MTRXB5', 'NULL_REPLACED')), '||"~"||', TRIM(COALESCE(icd10_code, 'NULL_REPLACED')), '||"~"||', TRIM(COALESCE(CAST(current_ts AS STRING), 'NULL_REPLACED')) ))) AS diagnosis_dk,
+    -- Dynamic invocation of your exact concatenation function
+    ${fn_calculateConcat(source.bk)} AS diagnosis_bk,
+    TO_HEX(MD5(CONCAT( TRIM(COALESCE(description, 'NULL_REPLACED')), '||"~"||', TRIM(COALESCE(clinical_category, 'NULL_REPLACED')), '||"~"||', TRIM(COALESCE(CAST(chronic_flag AS STRING), 'NULL_REPLACED')), '||"~"||', TRIM(COALESCE(CAST(is_hrrp_condition AS STRING), 'NULL_REPLACED')), '||"~"||', TRIM(COALESCE(CAST(is_acsc_condition AS STRING), 'NULL_REPLACED')), '||"~"||', TRIM(COALESCE(charlson_comorbidity_group, 'NULL_REPLACED')) ))) AS hashdiff,
+    icd10_code,
+    description,
+    clinical_category,
+    chronic_flag,
+    is_hrrp_condition,
+    is_acsc_condition,
+    charlson_comorbidity_group,
+    current_ts AS load_ts
+  FROM
+    src_ehr_diagnosis )
+    -- Step 3: Map clean outputs directly to final target structure
+SELECT
+  diagnosis_dk,
+  diagnosis_bk,
+  hashdiff,
+  icd10_code,
+  description,
+  clinical_category,
+  chronic_flag,
+  is_hrrp_condition,
+  is_acsc_condition,
+  charlson_comorbidity_group,
+  load_ts
+FROM
+  transformed_diagnosis
