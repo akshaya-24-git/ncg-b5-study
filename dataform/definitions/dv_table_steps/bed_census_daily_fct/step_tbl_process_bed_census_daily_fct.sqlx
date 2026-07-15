@@ -42,23 +42,23 @@ WITH
             dept.dept_bk AS department_fk,
             p.ptnt_bk AS patient_fk,
             CASE
-                WHEN UPPER(CAST(o.bed_status AS STRING)) IN ('Y', 'YES', 'TRUE', '1') THEN 1
+                WHEN UPPER(CAST(o.bed_status AS STRING)) IN ('Y', 'YES', 'TRUE', '1', 'OCCUPIED', 'O') THEN 1
                 ELSE 0
             END AS is_occupied,
             CASE
-                WHEN UPPER(CAST(o.bed_status AS STRING)) IN ('VACANT', 'AVAILABLE', 'EMPTY', '2') THEN 1
+                WHEN UPPER(CAST(o.bed_status AS STRING)) IN ('VACANT', 'V', 'AVAILABLE', 'EMPTY', '2') THEN 1
                 ELSE 0
             END AS is_vaccant,
             CASE
-                WHEN UPPER(CAST(o.bed_status AS STRING)) IN ('MAINTENANCE', 'CLEANING', 'BLOCKED', 'OUT OF SERVICE', '3') THEN 1
+                WHEN UPPER(CAST(o.bed_status AS STRING)) IN ('MAINTENANCE', 'M', 'CLEANING', 'BLOCKED', 'OUT OF SERVICE', '3') THEN 1
                 ELSE 0
             END AS is_maintained,
             CASE
-                WHEN o.patient_admit_date = CURRENT_DATE() THEN 1
+                WHEN o.patient_admit_date = o.census_date THEN 1
                 ELSE 0
             END AS is_admitted_today,
             CASE
-                WHEN o.patient_discharge_date = CURRENT_DATE() THEN 1
+                WHEN o.patient_discharge_date = o.census_date THEN 1
                 ELSE 0
             END AS is_discharge_today,
             CURRENT_TIMESTAMP() AS load_ts
