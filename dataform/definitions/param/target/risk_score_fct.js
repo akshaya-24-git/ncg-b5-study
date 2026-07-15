@@ -3,7 +3,6 @@ const target = {
     target_dataset: "b5_HIS_t",
     bk: ["risk_score_bk"],
     dk: ["risk_score_dk"],
-    hash_dif: "hash_diff",
     columns: [
         "risk_score_dk",
         "risk_score_bk",
@@ -19,7 +18,6 @@ const target = {
         "ed_visits_12m",
         "claims_utilization_12m",
         "scoring_model_version",
-        "hash_diff",
         "valid_from_ts",
         "valid_to_ts",
         "current_ind",
@@ -40,7 +38,6 @@ const target = {
         "ed_visits_12m",
         "claims_utilization_12m",
         "scoring_model_version",
-        "hash_diff",
         "valid_from_ts",
         "valid_to_ts",
         "current_ind",
@@ -58,8 +55,7 @@ const target = {
         "prior_admissions_12m",
         "ed_visits_12m",
         "claims_utilization_12m",
-        "scoring_model_version",
-        "hash_diff"
+        "scoring_model_version"
     ]
 };
 

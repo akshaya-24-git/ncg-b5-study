@@ -10,17 +10,17 @@ const source = {
         "patient_fk",
         "scoring_date_fk"
     ],
-    hash_diff: [
-        "risk_score",
-        "risk_tier",
-        "readmit_probability",
-        "comorbidity_count",
-        "chronic_disease_flag",
-        "prior_admissions_12m",
-        "ed_visits_12m",
-        "claims_utilization_12m",
-        "scoring_model_version"
-    ],
+    // hash_diff: [
+    //     "risk_score",
+    //     "risk_tier",
+    //     "readmit_probability",
+    //     "comorbidity_count",
+    //     "chronic_disease_flag",
+    //     "prior_admissions_12m",
+    //     "ed_visits_12m",
+    //     "claims_utilization_12m",
+    //     "scoring_model_version"
+    // ],
     source_tables: [
         {
             alias: "patient_dim_src",
