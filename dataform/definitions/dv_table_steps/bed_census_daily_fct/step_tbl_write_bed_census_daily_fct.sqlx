@@ -1,0 +1,39 @@
+js {
+    const {
+        fn_factLoad
+    } = require("includes/functions.js");
+    const {
+        projectConfig,
+        datasets
+    } = require("includes/glb_env.js");
+
+    // Pulling the aligned parameters 
+    const {
+        source
+    } = require("definitions/param/target/bed_census_daily_fct.js");
+
+    const project_id = projectConfig.projectName;
+    const tgt_dataset = datasets.target;
+}
+
+config {
+    type: "table",
+    name: "step_tbl_write_bed_census_daily_fct",
+    dependencies: ["step_tbl_process_bed_census_daily_fct"],
+    tags: ["core", "fact", "bed_census"]
+}
+
+-- Execute the macro passing the multi-element array config matching the Doctor schedule structure
+${
+    fn_factLoad({
+        source_ref: ref("step_tbl_process_bed_census_daily_fct"),
+        target_name: source.target_table, 
+        project_id: project_id,
+        tgt_dataset: tgt_dataset,
+        natural_key: source.bk[1],       
+        target_params: source             
+    })
+}
+
+SELECT
+  1 AS placeholder

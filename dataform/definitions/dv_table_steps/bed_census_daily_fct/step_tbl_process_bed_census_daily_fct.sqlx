@@ -1,0 +1,133 @@
+js {
+    const glb_env = require("includes/glb_env.js");
+    const {
+        source
+    } = require("definitions/param/source/ehr_bed_occupancy.js");
+}
+
+config {
+    type: "table",
+    schema: glb_env.datasets.staging,
+    name: "step_tbl_process_bed_census_daily_fct",
+    dependencies: ["step_tbl_read_bed_census_daily_fct"],
+    description: "Processes bed census fact data utilizing dimension keys fetched via lookup joins.",
+    tags: ["staging", "fact", "bed_census"]
+}
+
+  -- Step 1: Raw extraction from your read view
+WITH
+  read_cte AS (
+  SELECT
+    occupancy_id,
+    facility_code,
+    department_code,
+    bed_id,
+    bed_category,
+    patient_id,
+    census_date,
+    bed_status,
+    patient_admit_date,
+    patient_discharge_date
+  FROM
+    ${ref("step_tbl_read_bed_census_daily_fct")} ),
+  -- Step 2: Look up dimension keys and apply transformation macros
+  cte_transformed AS (
+SELECT
+  -- Target Keys (BK and DK generation from source tracking properties)
+  CONCAT('MTRXB5<>', CAST(r.occupancy_id AS STRING)) AS bed_census_bk,
+  TO_HEX(MD5(CONCAT('MTRXB5<>', CAST(r.occupancy_id AS STRING), '<>', CAST(CURRENT_TIMESTAMP() AS STRING)))) AS bed_census_dk,
+  -- Date Transformation 
+  r.occupancy_id,
+  CAST(r.census_date AS DATE) AS census_date,
+  -- Dimension Keys (Fetched via LEFT JOINs - Updated to _fk)
+  db.bed_bk AS bed_fk,
+  df.facility_bk AS facility_fk,
+  dd.dept_bk AS department_fk,
+  dp.ptnt_bk AS patient_fk,
+  -- Business Logic (Status Flags)
+  CASE
+    WHEN UPPER(TRIM(r.bed_status)) IN ('OCCUPIED', 'O', '1') THEN 1
+    ELSE 0
+END
+  AS is_occupied,
+  CASE
+    WHEN UPPER(TRIM(r.bed_status)) IN ('VACANT', 'V', '0', 'AVAILABLE') THEN 1
+    ELSE 0
+END
+  AS is_vaccant,
+  CASE
+    WHEN UPPER(TRIM(r.bed_status)) IN ('MAINTENANCE', 'M', 'UNDER MAINTENANCE') THEN 1
+    ELSE 0
+END
+  AS is_maintained,
+  -- Business Logic (Admit/Discharge Flags)
+  CASE
+    WHEN r.patient_admit_date = r.census_date THEN 1
+    ELSE 0
+END
+  AS is_admitted_today,
+  CASE
+    WHEN r.patient_discharge_date = r.census_date THEN 1
+    ELSE 0
+END
+  AS is_discharge_today,
+  -- Context Preservation for Surrogate Key generation
+  r.facility_code,
+  r.department_code,
+  r.bed_id,
+  r.patient_id,
+  -- Operational Loading Timestamp
+  CURRENT_TIMESTAMP() AS load_ts
+FROM
+  read_cte AS r
+  -- 1. Bed Dimension Join
+LEFT JOIN
+  ${ref("bed_dim")} AS db
+ON
+  CONCAT('MTRXB5<>', CAST(r.bed_id AS STRING), '<>', CAST(r.bed_category AS STRING)) = db.bed_bk
+  -- 2. Facility Dimension Join
+LEFT JOIN
+  ${ref("facility_dim")} AS df
+ON
+  CONCAT('MTRXB5<>', CAST(r.facility_code AS STRING)) = df.facility_bk
+  -- 3. Department Dimension Join
+LEFT JOIN
+  ${ref("department_dim")} AS dd
+ON
+  CONCAT('MTRXB5<>', CAST(r.department_code AS STRING), '<>', CAST(r.facility_code AS STRING)) = dd.dept_bk
+  -- 4. Patient Dimension Join
+LEFT JOIN
+  ${ref("patient_dim")} AS dp
+ON
+  CONCAT('MTRXB5<>', CAST(r.patient_id AS STRING)) = dp.ptnt_bk )
+  -- Step 3: Final Selection and Surrogate Key Generation
+SELECT
+  -- 1. Expose the generated natural Business Key and hashed Dimensional Key
+  bed_census_dk,
+  bed_census_bk,
+  -- Hashdiff: Built cleanly using only non-key descriptive attributes with custom null fallbacks
+-- Hashdiff: Includes occupancy_id followed by your non-key descriptive attributes
+  TO_HEX(MD5(CONCAT(
+    IFNULL(CAST(occupancy_id AS STRING), 'NULL_REPLACED'), '~',
+    IFNULL(CAST(is_occupied AS STRING), 'NULL_REPLACED'), '~',
+    IFNULL(CAST(is_vaccant AS STRING), 'NULL_REPLACED'), '~',
+    IFNULL(CAST(is_maintained AS STRING), 'NULL_REPLACED'), '~',
+    IFNULL(CAST(is_admitted_today AS STRING), 'NULL_REPLACED'), '~',
+    IFNULL(CAST(is_discharge_today AS STRING), 'NULL_REPLACED')
+  ))) AS hash_diff,
+  -- 3. Expose target attributes explicitly for your fact profile (Updated to _fk)
+ 
+  census_date,
+  bed_fk,
+  facility_fk,
+  department_fk,
+  patient_fk,
+  occupancy_id,
+  is_occupied,
+  is_vaccant,
+  is_maintained,
+  is_admitted_today,
+  is_discharge_today,
+  load_ts
+FROM
+  cte_transformed
