@@ -1,0 +1,62 @@
+const target = {
+    target_table: "risk_score_fct",
+    target_dataset: "b5_HIS_t",
+    bk: ["risk_score_bk"],
+    dk: ["risk_score_dk"],
+    columns: [
+        "risk_score_dk",
+        "risk_score_bk",
+        "patient_fk",
+        "scoring_date_fk",
+        "bridge_fk",
+        "risk_score",
+        "risk_tier",
+        "readmit_probability",
+        "comorbidity_count",
+        "chronic_disease_flag",
+        "prior_admissions_12m",
+        "ed_visits_12m",
+        "claims_utilization_12m",
+        "scoring_model_version",
+        "valid_from_ts",
+        "valid_to_ts",
+        "current_ind",
+        "load_ts"
+    ],
+    insert_list: [
+        "risk_score_dk",
+        "risk_score_bk",
+        "patient_fk",
+        "scoring_date_fk",
+        "bridge_fk",
+        "risk_score",
+        "risk_tier",
+        "readmit_probability",
+        "comorbidity_count",
+        "chronic_disease_flag",
+        "prior_admissions_12m",
+        "ed_visits_12m",
+        "claims_utilization_12m",
+        "scoring_model_version",
+        "valid_from_ts",
+        "valid_to_ts",
+        "current_ind",
+        "load_ts"
+    ],
+    update_list: [
+        "patient_fk",
+        "scoring_date_fk",
+        "bridge_fk",
+        "risk_score",
+        "risk_tier",
+        "readmit_probability",
+        "comorbidity_count",
+        "chronic_disease_flag",
+        "prior_admissions_12m",
+        "ed_visits_12m",
+        "claims_utilization_12m",
+        "scoring_model_version"
+    ]
+};
+
+module.exports = { target };

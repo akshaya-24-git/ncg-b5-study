@@ -6,30 +6,23 @@ const source = {
 
     dk: [
         "'MTRXB5'",
-        "department_code"
+        "department_code",
+        "facility_code",
+        "current_timestamp()"
     ],
 
     bk: [
         "'MTRXB5'",
-        "department_code"
+        "department_code",
+        "facility_code"
     ],
 
     hash_diff: [
+        "department_code",
+        "facility_code",
         "department_name",
         "department_type",
-        "dept_capacity",
-        "head_doctor_id",
-        "state",
-        "total_licensed_beds",
-        "zip_code",
-        "is_dept_active",
-        "facility_type_code",
-        "region",
-        "is_facility_active",
-        "facility_name",
-        "city",
-        "facility_code",
-        "last_updated"
+        "dept_capacity"
     ]
 };
 

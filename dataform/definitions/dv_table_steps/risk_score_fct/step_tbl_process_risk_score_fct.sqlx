@@ -1,0 +1,136 @@
+js {
+    const { source: source_config } = require("definitions/param/source/risk_score_fct.js");
+    const { fn_calculateHash, fn_calculateConcat } = require("includes/functions.js");
+}
+
+config {
+    type: "table",
+    name: "step_tbl_process_risk_score_fct",
+    schema: dataform.projectConfig.vars.stagingDataset,
+    dependencies: ["step_tbl_read_risk_score_fct"],
+    description: "Processes the multi-source risk score fact inputs into the staging fact model using STTM-specified formulas.",
+    tags: ["risk", "fact", "score"]
+}
+
+WITH cte_read AS (
+    SELECT * FROM ${ref('step_tbl_read_risk_score_fct')}
+),
+
+-- 1. Clean unique patient listing
+cte_distinct_patients AS (
+    SELECT DISTINCT patient_fk, scoring_date_fk FROM cte_read
+),
+
+-- 2. Unpack arrays and compute clinical aggregates
+cte_clinical_math AS (
+    SELECT
+        r.patient_fk,
+        r.scoring_date_fk,
+        r.bridge_fk,
+        COALESCE(COUNT(DISTINCT cp.charlson_comorbidity_group), 0) AS comorbidity_count,
+        MAX(CASE WHEN cp.chronic_flag = TRUE THEN 1 ELSE 0 END) AS chronic_indicator,
+        COALESCE(SUM(
+            CASE
+                WHEN cp.charlson_comorbidity_group = 'Diabetes without complication' THEN 1.0
+                WHEN cp.charlson_comorbidity_group = 'Moderate-Severe Renal Disease' THEN 3.0
+                ELSE 1.0
+            END * (1.0 + (0.30 * COALESCE(CAST(cp.is_hrrp_condition AS INT64), 0)) + (0.25 * COALESCE(CAST(cp.is_acsc_condition AS INT64), 0)))
+        ), 0.0) AS raw_c_score
+    FROM cte_read r
+    LEFT JOIN UNNEST(r.clinical_profile) cp
+    GROUP BY r.patient_fk, r.scoring_date_fk, r.bridge_fk
+),
+
+-- 3. Utilization aggregates (prior admissions and ED visits)
+cte_utilization_math AS (
+    SELECT
+        r.patient_fk,
+        r.scoring_date_fk,
+        COALESCE(COUNT(CASE WHEN up.encounter_type = 'I' THEN 1 END), 0) AS prior_admissions_12m,
+        COALESCE(COUNT(CASE WHEN up.encounter_type = 'O' THEN 1 END), 0) AS ed_visits_12m,
+        COALESCE(SUM(
+            CASE WHEN up.encounter_type = 'I' THEN 10.0 ELSE 5.0 END * EXP(-0.005 * DATE_DIFF(up.observation_date, SAFE_CAST(LEFT(CAST(up.arrival_time AS STRING), 10) AS DATE), DAY)) *
+            (1.0 + (0.20 * COALESCE(CAST(up.is_festival AS INT64), 0)))
+        ), 0.0) AS raw_u_score
+    FROM cte_read r
+    LEFT JOIN UNNEST(r.utilization_profile) up
+    GROUP BY r.patient_fk, r.scoring_date_fk
+),
+
+-- 4. Financial aggregates
+cte_financial_math AS (
+    SELECT
+        r.patient_fk,
+        r.scoring_date_fk,
+        COALESCE(SUM(SAFE_CAST(fp.paid_amount AS FLOAT64)), 0.00) AS claims_utilization_12m,
+        COALESCE(SAFE_DIVIDE(COUNT(CASE WHEN fp.denial_flag = TRUE THEN 1 END), NULLIF(COUNT(fp.paid_amount),0)), 0.0) AS denial_rate,
+        LN(COALESCE(SUM(SAFE_CAST(fp.paid_amount AS FLOAT64)), 0.00) + 1.0) AS logged_spend
+    FROM cte_read r
+    LEFT JOIN UNNEST(r.financial_profile) fp
+    GROUP BY r.patient_fk, r.scoring_date_fk
+),
+
+-- 5. Consolidate domain calculations
+cte_transform AS (
+    SELECT
+        dp.patient_fk,
+        dp.scoring_date_fk,
+        COALESCE(c.bridge_fk, NULL) AS bridge_fk,
+        COALESCE(c.comorbidity_count, 0) AS comorbidity_count,
+        CASE WHEN COALESCE(c.chronic_indicator, 0) = 1 THEN TRUE ELSE FALSE END AS chronic_disease_flag,
+        COALESCE(u.prior_admissions_12m, 0) AS prior_admissions_12m,
+        COALESCE(u.ed_visits_12m, 0) AS ed_visits_12m,
+        COALESCE(f.claims_utilization_12m, 0.00) AS claims_utilization_12m,
+        COALESCE(f.denial_rate, 0.0) AS denial_rate,
+        (0.45 * COALESCE(c.raw_c_score, 0.0) * 10.0) +
+        (0.35 * COALESCE(u.raw_u_score, 0.0) * 10.0) +
+        (0.20 * (COALESCE(f.logged_spend, 0.0) * (1.0 + (0.15 * COALESCE(f.denial_rate, 0.0)))) * 4.5) AS calculated_composite_weight
+    FROM cte_distinct_patients dp
+    LEFT JOIN cte_clinical_math c ON dp.patient_fk = c.patient_fk AND dp.scoring_date_fk = c.scoring_date_fk
+    LEFT JOIN cte_utilization_math u ON dp.patient_fk = u.patient_fk AND dp.scoring_date_fk = u.scoring_date_fk
+    LEFT JOIN cte_financial_math f ON dp.patient_fk = f.patient_fk AND dp.scoring_date_fk = f.scoring_date_fk
+),
+
+-- 6. Serialize to final fields, applying rounding and STTM-specified formulas
+cte_pre_serialize AS (
+    SELECT
+        ${fn_calculateHash(source_config.dk)} AS risk_score_dk,
+        ${fn_calculateHash(["patient_fk", "scoring_date_fk"])} AS risk_score_bk,
+        patient_fk,
+        scoring_date_fk,
+        bridge_fk,
+        ROUND(GREATEST(0.00, LEAST(100.00, calculated_composite_weight)), 2) AS risk_score,
+        CASE
+            WHEN calculated_composite_weight >= 75.00 THEN 'Critical'
+            WHEN calculated_composite_weight >= 50.00 THEN 'High'
+            WHEN calculated_composite_weight >= 25.00 THEN 'Medium'
+            ELSE 'Low'
+        END AS risk_tier,
+        ROUND(
+            1.0 / (1.0 + EXP(-(
+                -3.80
+                + (prior_admissions_12m * 0.65)
+                + (ed_visits_12m * 0.35)
+                + (comorbidity_count * 0.40)
+                + (LN(claims_utilization_12m + 1.0) * 0.15)
+                + (denial_rate * 0.50)
+            ))), 4
+        ) AS readmit_probability,
+        comorbidity_count,
+        chronic_disease_flag,
+        prior_admissions_12m,
+        ed_visits_12m,
+        claims_utilization_12m,
+        'v3.0-deterministic-math' AS scoring_model_version
+    FROM cte_transform
+),
+
+-- 7. Final output with hash diff and load timestamp
+cte_final AS (
+    SELECT
+        *,
+        CURRENT_TIMESTAMP() AS load_ts
+    FROM cte_pre_serialize
+)
+
+SELECT * FROM cte_final

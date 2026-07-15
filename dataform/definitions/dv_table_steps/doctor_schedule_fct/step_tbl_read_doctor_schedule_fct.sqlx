@@ -1,0 +1,39 @@
+js {
+  const glb_env = require("includes/glb_env.js");
+  const { source } = require("definitions/param/source/hr_schedule.js");
+}
+
+config {
+    type: "table",
+    schema: glb_env.datasets.staging,
+    name: "step_tbl_read_doctor_schedule_fct",
+    tags: ["f_doctor_schedule", "fct"]
+}
+
+WITH cte_doc_fct_read AS (
+    SELECT
+        schedule_id,
+        doctor_id,
+        facility_code,
+        department_code,
+        schedule_date,
+        scheduled_hours,
+        actual_hours_worked,
+        leave_hours,
+        schedule_type,
+        leave_type
+    FROM ${ref(source.table_name)}
+)
+
+SELECT
+    schedule_id,
+    doctor_id,
+    facility_code,
+    department_code,
+    schedule_date,
+    scheduled_hours,
+    actual_hours_worked,
+    leave_hours,
+    schedule_type,
+    leave_type
+FROM cte_doc_fct_read

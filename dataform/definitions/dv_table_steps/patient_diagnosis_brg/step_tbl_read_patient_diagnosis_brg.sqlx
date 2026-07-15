@@ -1,0 +1,31 @@
+js {
+  const glb_env = require("includes/glb_env.js");
+  const { source } = require("definitions/param/source/ehr_ptnt_diagnosis.js");
+}
+
+config {
+  type: "table",
+  name: "step_tbl_read_patient_diagnosis_brg",
+  schema: glb_env.datasets.staging,
+  description: "Reads raw patient diagnosis rows from the source table for bridge processing.",
+  tags: ["patient", "diagnosis", "bridge", "raw"]
+}
+
+WITH
+  cte_patient_diagnosis_raw AS (
+    SELECT
+      patient_id,
+      icd10_code,
+      diagnosis_type,
+      CAST(onset_date AS DATE) AS onset_date,
+      CAST(resolution_date AS DATE) AS resolution_date,
+      is_active,
+      CAST(last_updated AS TIMESTAMP) AS last_updated
+    FROM
+      ${ref(source.source_table_brg)}
+  )
+
+SELECT
+  *
+FROM
+  cte_patient_diagnosis_raw

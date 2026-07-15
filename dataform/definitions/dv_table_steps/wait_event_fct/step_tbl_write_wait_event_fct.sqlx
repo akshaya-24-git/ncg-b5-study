@@ -1,0 +1,37 @@
+js {
+    const {
+        fn_factLoad
+    } = require("includes/functions.js");
+    const {
+        projectConfig,
+        datasets
+    } = require("includes/glb_env.js");
+
+    const {
+        target
+    } = require("definitions/param/target/wait_event_fct.js");
+    const project_id = projectConfig.projectName;
+    const tgt_dataset = datasets.target;
+}
+
+config {
+    type: "operations",
+    hasOutput: true,
+    name: "step_tbl_write_wait_event_fct",
+    dependencies: ["step_tbl_process_wait_event_fct"],
+    description: "Loads processed data into the final service_stage_dim table",
+    tags: ["f_wait_time", "fct"]
+}
+
+  ${
+      fn_factLoad({
+          source_ref: ref("step_tbl_process_wait_event_fct"),
+          target_name: target.target_table,
+          project_id: project_id,
+          tgt_dataset: tgt_dataset,
+          natural_key: target.bk[0],
+          target_params: target
+      })
+  }
+SELECT
+  1 AS placeholder
