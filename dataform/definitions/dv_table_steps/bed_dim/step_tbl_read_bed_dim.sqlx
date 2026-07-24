@@ -19,8 +19,8 @@ WITH
             ac_status,
             sharing_capacity,
             operational_status,
-            room_no,
-            floor_no
+            room_number,
+            floor_number
         FROM ${ref(source.source_table)}
     )
 
@@ -30,6 +30,6 @@ SELECT
     ac_status,
     sharing_capacity,
     operational_status,
-    room_no,
-    floor_no
+    room_number,
+    floor_number
 FROM cte_bed;

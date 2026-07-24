@@ -35,8 +35,8 @@ WITH
             ${source_config.get_status_flag('ac_status')} AS ac_status,
             CAST(sharing_capacity AS INT64) AS sharing_capacity,
             TRIM(operational_status) AS operational_status,
-            TRIM(room_no) AS room_number,
-            CAST(floor_no AS INT64) AS floor_number,
+            TRIM(room_number) AS room_number,
+            CAST(floor_number AS INT64) AS floor_number,
 
             -- Compute the hashdiff at the transform layer so it's available downstream
             ${fn_calculateHash(source_config.hashdiff)} AS hashdiff,
@@ -72,3 +72,4 @@ WITH
     )
 
 SELECT * FROM cte_final;
+
